@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: convico-story-review-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev --ignore-scripts
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: 22.19.0
+      - key: DEMO_PROVIDER
+        value: openrouter
+      - key: DEMO_MODEL
+        value: google/gemma-4-26b-a4b-it
+      - key: DEMO_MAX_REQUESTS
+        value: 100
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: DEMO_REVIEW_PASSWORD
+        sync: false
