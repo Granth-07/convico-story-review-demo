@@ -1,6 +1,7 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
+import {buildDirector,directorMessage,enforceSpeakers,revision} from './story-director.mjs';
 
 const page=new URL('./story.html',import.meta.url);
 const prompt=await readFile(new URL('./story-prompt.txt',import.meta.url),'utf8');
@@ -87,7 +88,7 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  'Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"});
  res.end(await readFile(page));return;
  }
- if(req.method==='GET'&&req.url==='/api/status')return reply(res,200,{configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
+ if(req.method==='GET'&&req.url==='/api/status')return reply(res,200,{revision,configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
  error:settings.key?null:'Set '+(settings.provider==='openrouter'?'OPENROUTER_API_KEY':'DEEPINFRA_API_KEY')+' to a funded test key in PowerShell, then restart this demo.'});
  if(req.method!=='POST'||req.url!=='/api/story')return reply(res,404,{error:'Page not found.'});
  if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))return reply(res,403,{error:'Use the demo page at '+origin});
@@ -101,9 +102,10 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  // Recheck after reading the body to prevent two simultaneous uploads acquiring the lock.
  if(busy)return reply(res,429,{error:'A story request is already running.'});
  busy=true;ownsRequest=true;
+ const director=buildDirector(messages);
  const started=Date.now();
  const response=await fetcher(settings.endpoint,{method:'POST',headers:{Authorization:'Bearer '+settings.key,'Content-Type':'application/json'},
- body:JSON.stringify({model:settings.model,messages:[{role:'system',content:prompt},...messages],max_tokens:1100,temperature:0.65,
+ body:JSON.stringify({model:settings.model,messages:[{role:'system',content:prompt+'\n\n'+directorMessage(director).content},...messages],max_tokens:1100,temperature:0.65,
  stream:true,stream_options:{include_usage:true}}),signal:AbortSignal.timeout(120000),redirect:'error'});
  if(!response.ok){
  await response.body?.cancel();
@@ -122,8 +124,9 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  let content=result.text.trim();
  if(content.startsWith('```'))content=content.slice(3).replace(/^json\s*/i,'').replace(/```\s*$/,'').trim();
  let story;
- try{story=validateStory(JSON.parse(content));}catch(error){return reply(res,502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
- return reply(res,200,{story,configured_model:settings.model,model:result.reportedModel,telemetry});
+ try{story=enforceSpeakers(validateStory(JSON.parse(content)),director);}catch(error){return reply(res,502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
+ // Return public controls only; private director/backstory notes stay on the server.
+ return reply(res,200,{story,director:{revision,turn:director.turn,episode:director.episode,speaking:director.speaking},configured_model:settings.model,model:result.reportedModel,telemetry});
  }catch(error){
  reply(res,502,{error:error.name==='TimeoutError'?'The model timed out. Your message is kept; usage may still have been charged.':'Could not complete the model request. Your message is kept for retry.',telemetry});
  }finally{if(ownsRequest)busy=false;}

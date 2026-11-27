@@ -41,7 +41,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 .dialogue{margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .dialogue strong{display:block;color:var(--rose);font-size:12px;letter-spacing:.03em;margin-bottom:3px}
 #log{height:430px}.cast strong{color:var(--ink)}.cast p{font-size:14px;margin:0 0 12px}
-@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}</style>
+@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}.speaker-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}.speaker-controls button{font:inherit;font-size:12px;background:#3b2b30;color:var(--rose);border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}.speaker-controls button:disabled{cursor:wait}#version-note{padding:10px;border:1px solid var(--line);border-radius:8px}</style>
 </head>
 <body>
 <main>
@@ -58,6 +58,9 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 <header class="chat-head"><span id="place">Thodi Si Chai · Opening se ek raat pehle</span><button id="export-chat" type="button">Export chat</button><button id="restart" type="button">Phir se shuru</button></header>
 <div id="log" role="log" aria-label="Story conversation"></div>
 <div class="reply-area">
+<p id="version-note" class="hint" hidden>This is a saved conversation from the earlier story. Export it to keep a copy, or choose “Start updated story” for a fresh playthrough.</p>
+<div id="speakers" class="speaker-controls" aria-label="Character speaking controls"></div>
+<p class="hint">Kisi ko shaant rehne ko keh sakte ho. Dobara bulane tak woh nahi bolegi.</p>
 <p class="hint">Kisi reply par tap karke bhejo</p>
 <div id="suggestions" aria-label="Teen suggested replies"></div>
 <form id="composer">
@@ -96,15 +99,15 @@ function validStory(story){
  story.suggested_replies.every(t=>typeof t==='string'&&t.trim());
 }
 function initial(){
- return {version:5,messages:[{role:'story',...structuredClone(opening),source:'opening'}],attempts:[]};
+ return {version:6,legacy:false,messages:[{role:'story',...structuredClone(opening),source:'opening'}],attempts:[]};
 }
 let state=initial();
 try{
  const saved=JSON.parse(localStorage.getItem(storageKey));
- if(saved&&saved.version===5&&Array.isArray(saved.messages)&&saved.messages.length&&
+ if(saved&&[5,6].includes(saved.version)&&Array.isArray(saved.messages)&&saved.messages.length&&
  saved.messages[0].role==='story'&&saved.messages[0].source==='opening'&&
  saved.messages.every((m,i)=>m&&(i%2===0?m.role==='story'&&validStory(m)&&(i===0||m.source==='gemma'):m.role==='user'&&typeof m.text==='string'&&m.text.trim()))&&
- saved.messages.length%2===1&&Array.isArray(saved.attempts))state=saved;
+ saved.messages.length%2===1&&Array.isArray(saved.attempts))state={...saved,version:6,legacy:saved.version===5||Boolean(saved.legacy)};
 }catch{}
 const log=document.getElementById('log');
 const options=document.getElementById('suggestions');
@@ -123,6 +126,18 @@ function line(parent,tag,className,text){
 }
 function render(){
  log.replaceChildren();options.replaceChildren();
+ const director=state.messages.at(-1).director;
+ document.getElementById('version-note').hidden=!state.legacy;
+ const speakerControls=document.getElementById('speakers');speakerControls.replaceChildren();
+ for(const name of ['Arohi','Naina']){
+ const speaking=director?.speaking?.[name]!==false;
+ const control=document.createElement('button');control.type='button';
+ control.textContent=name+(speaking?' · Shaant raho':' · Ab bolo');
+ control.setAttribute('aria-label',name+(speaking?': ask to stay quiet':': invite to speak again'));
+ control.disabled=!connected||busy||checking;
+ control.addEventListener('click',()=>send(name+(speaking?', filhaal chup raho.':', ab tum bolo.')));
+ speakerControls.append(control);
+ }
  for(const message of state.messages){
  const article=document.createElement('article');
  if(message.role==='user'){
@@ -157,7 +172,8 @@ function render(){
  document.getElementById('restart').disabled=busy||checking;
  document.getElementById('reconnect').disabled=busy||checking;
  document.getElementById('export-chat').disabled=busy;
- document.getElementById('place').textContent='Thodi Si Chai · Story chat';
+ document.getElementById('place').textContent='Thodi Si Chai · Episode '+(director?.episode||1);
+ document.getElementById('restart').textContent='Start updated story';
  mode.textContent=busy?'Gemma is writing…':connected?'Team review · Gemma 26B':'Preview · Model connection required';
  status.textContent=error||(busy?'Writing the next scene…':checking?'Checking the review server…':
  connected?'Every send calls the model provider. First send verifies generation; chat saves in this browser.':'The review server is unavailable. Contact Granth.');
@@ -215,7 +231,7 @@ async function send(text){
  if(!validStory(data.story))throw Error('Gemma returned an incomplete scene. Your message is kept for retry.');
  if(data.configured_model?.toLowerCase()!=='google/gemma-4-26b-a4b-it')throw Error('Unexpected configured model. Review the server configuration.');
  if(data.model&&data.model.toLowerCase()!=='google/gemma-4-26b-a4b-it')throw Error('Provider reported an unexpected model. Review before continuing.');
- state.messages.push({role:'user',text},{role:'story',...data.story,source:'gemma',
+ state.messages.push({role:'user',text},{role:'story',...data.story,source:'gemma',director:data.director,
  model:data.model,telemetry:data.telemetry??null});
  state.attempts.at(-1).accepted=true;save();input.value='';
  }catch(failure){
@@ -229,7 +245,11 @@ document.getElementById('composer').addEventListener('submit',event=>{event.prev
 input.addEventListener('keydown',event=>{
  if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();document.getElementById('composer').requestSubmit();}
 });
-document.getElementById('restart').addEventListener('click',()=>{if(busy)return;state=initial();input.value='';error='';save();render();});
+document.getElementById('restart').addEventListener('click',()=>{
+ if(busy||checking)return;
+ if(state.messages.length>1&&!confirm('Start the updated story? This replaces the saved conversation in this browser. Export chat first if you want to keep it.'))return;
+ state=initial();input.value='';error='';save();render();
+});
 document.getElementById('reconnect').addEventListener('click',connect);
 document.getElementById('export-chat').addEventListener('click',()=>{
  const report={title:'Kal Phir Miloge?',exported_at:new Date().toISOString(),configured_model:'google/gemma-4-26b-a4b-it',memory:'browser-history',attempts:state.attempts,
