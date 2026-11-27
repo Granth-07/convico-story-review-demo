@@ -41,18 +41,20 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 .dialogue{margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .dialogue strong{display:block;color:var(--rose);font-size:12px;letter-spacing:.03em;margin-bottom:3px}
 #log{height:430px}.cast strong{color:var(--ink)}.cast p{font-size:14px;margin:0 0 12px}
-@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}.speaker-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}.speaker-controls button{font:inherit;font-size:12px;background:#3b2b30;color:var(--rose);border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}.speaker-controls button:disabled{cursor:wait}#version-note{padding:10px;border:1px solid var(--line);border-radius:8px}.send-feedback{padding:12px;border:1px solid #edb09e;border-radius:10px;background:#503136;color:#ffe2ce;white-space:pre-wrap;margin-bottom:10px}#retry-message,#cancel-request{background:transparent;color:var(--rose);border:1px solid var(--line);padding:9px;border-radius:8px;margin-bottom:10px;cursor:pointer}.character-scene{border-left:2px solid var(--line);padding-left:10px;margin-top:13px}.character-scene .scene-copy{margin-bottom:5px}#send-button{min-width:105px}.episode-ending{margin-top:16px;padding:12px;border-top:1px solid var(--rose);color:var(--rose)}.episode-ending p{margin-bottom:0}</style>
+@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}.speaker-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}.speaker-controls button{font:inherit;font-size:12px;background:#3b2b30;color:var(--rose);border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}.speaker-controls button:disabled{cursor:wait}#version-note{padding:10px;border:1px solid var(--line);border-radius:8px}.send-feedback{padding:12px;border:1px solid #edb09e;border-radius:10px;background:#503136;color:#ffe2ce;white-space:pre-wrap;margin-bottom:10px}#retry-message,#cancel-request{background:transparent;color:var(--rose);border:1px solid var(--line);padding:9px;border-radius:8px;margin-bottom:10px;cursor:pointer}.character-scene{border-left:2px solid var(--line);padding-left:10px;margin-top:13px}.character-scene .scene-copy{margin-bottom:5px}#send-button{min-width:105px}.episode-ending{margin-top:16px;padding:12px;border-top:1px solid var(--rose);color:var(--rose)}.episode-ending p{margin-bottom:0}.story-nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;font-size:13px}.story-nav a{color:var(--rose);text-decoration:none}.story-nav a:hover{text-decoration:underline}.train-mode{--bg:#101e26;--panel:#182b35;--line:#35535e;--rose:#e8c185;--muted:#b1c4c8;background:radial-gradient(ellipse at top left,#31545d,transparent 65%),var(--bg)}.train-mode .art{background:linear-gradient(135deg,#213c4b,#0c1824)}.train-mode .window{inset:28px 35px 42px;border-radius:16px;border:8px solid #415461;background:repeating-linear-gradient(115deg,transparent 0,transparent 20px,#c7dfdd33 21px,transparent 23px),linear-gradient(170deg,#324b65,#091a2a 60%,#b8905433)}.train-mode .awning{height:7px;top:16px;left:26px;right:26px;background:#d9b56f;border-radius:4px}.train-mode .sign{font:600 14px monospace;letter-spacing:.12em;border-color:#83969d;background:#13232e;bottom:14px}.train-mode h1{font-size:48px;letter-spacing:-.02em}.train-mode .story-turn{background:#1c333f;border-color:var(--line)}.train-mode .player .bubble{background:#395762}.train-mode textarea{background:#10242e}.train-mode #suggestions button,.train-mode .speaker-controls button{background:#203943;border-color:var(--line)}.casebook{margin-top:20px;padding-top:14px;border-top:1px solid var(--line);font-size:13px}.casebook ul{padding-left:18px}.casebook li{margin:14px 0}.casebook p{margin:5px 0}.casebook small{color:var(--muted)}</style>
 </head>
 <body>
 <main>
 <header><span class="brand">convico</span><span class="mode" id="mode-label">Preview · Model connection required</span></header>
+<nav class="story-nav" aria-label="Choose a story"><a href="/">Kal Phir Miloge?</a><a href="/last-train/">The Last Train ↗</a></nav>
 <div class="layout">
 <aside>
-<div class="art" aria-hidden="true"><div class="window"></div><div class="awning"></div><div class="sign">Thodi Si Chai</div></div>
-<div class="cover"><div class="genre">Romance · Dosti · Baarish</div>
-<h1>Kal Phir<br>Miloge?</h1>
-<p>Ek café. Kal opening. Arohi ki nervous smile, Naina ki teasing aur tumhari ek honest chai review se shuru hoti hai baat. Rukna, flirt karna ya bas dost banna, tum decide karo.</p>
-<div class="cast"><p><strong>Arohi, 25</strong><br>Café uska sapna hai. Tumhara honest review uski opening se pehli achhi memory ban sakta hai.</p><p><strong>Naina, 26</strong><br>Business partner aur best friend. Budget bhi sambhaalti hai aur awkward silence bhi.</p></div></div>
+<div class="art" aria-hidden="true"><div class="window"></div><div class="awning"></div><div class="sign" id="cover-sign">Thodi Si Chai</div></div>
+<div class="cover"><div class="genre" id="genre">Romance · Dosti · Baarish</div>
+<h1 id="story-title">Kal Phir<br>Miloge?</h1>
+<p id="story-description">Ek café. Kal opening. Arohi ki nervous smile, Naina ki teasing aur tumhari ek honest chai review se shuru hoti hai baat. Rukna, flirt karna ya bas dost banna, tum decide karo.</p>
+<div class="cast" id="cast-description"><p><strong>Arohi, 25</strong><br>Café uska sapna hai. Tumhara honest review uski opening se pehli achhi memory ban sakta hai.</p><p><strong>Naina, 26</strong><br>Business partner aur best friend. Budget bhi sambhaalti hai aur awkward silence bhi.</p></div>
+<details id="casebook" class="casebook" hidden><summary>Clues found · evidence, not assumptions</summary><ul id="clue-list"></ul></details></div>
 </aside>
 <section class="chat" aria-label="Interactive romantic story">
 <header class="chat-head"><span id="place">Thodi Si Chai · Opening se ek raat pehle</span><button id="export-chat" type="button">Export chat</button><button id="restart" type="button">Phir se shuru</button></header>
@@ -77,8 +79,11 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 </main>
 <script>
 'use strict';
-const storageKey='convico-kal-hosted-review-v1';
-const opening={
+const profile=/*__STORY_PROFILE__*/ null;
+const apiBase=profile?.api_base||'';
+const mainCast=profile?.cast||['Arohi','Naina'];
+const storageKey=profile?.storage_key||'convico-kal-hosted-review-v1';
+const opening=profile?.opening||{
  narration:[
  'Baarish ke beech tum café ke chhajje ke neeche rukte ho. Arohi darwaaza kholkar tumhari taraf dekhti hai.',
  'Uske peeche Naina ek kursi se menu cards hata deti hai. Counter par do mismatched cups rakhe hain.'
@@ -122,6 +127,19 @@ const options=document.getElementById('suggestions');
 const input=document.getElementById('message');
 const status=document.getElementById('status');
 const mode=document.getElementById('mode-label');
+if(profile){
+ document.title=profile.title+' · Convico story review';
+ document.body.className='train-mode';
+ document.getElementById('story-title').textContent=profile.title;
+ document.getElementById('story-description').textContent=profile.description;
+ document.getElementById('genre').textContent=profile.genre;
+ document.getElementById('cover-sign').textContent=profile.sign;
+ input.placeholder=profile.placeholder;
+ const castPanel=document.getElementById('cast-description');castPanel.replaceChildren();
+ for(const character of profile.characters){const paragraph=document.createElement('p');
+  const name=document.createElement('strong');name.textContent=character.name;paragraph.append(name);
+  const description=document.createElement('span');description.textContent=' — '+character.description;paragraph.append(description);castPanel.append(paragraph);}
+}
 let connected=false,checking=false,busy=false,error='',pendingText='',activeController=null;
 if(state.pending){input.value=state.pending.text;error=state.pending.error||'Your previous message is saved as a draft. Retry to check its result.';}
 
@@ -138,7 +156,7 @@ function render(){
  const director=state.messages.at(-1).director;
  document.getElementById('version-note').hidden=!state.legacy;
  const speakerControls=document.getElementById('speakers');speakerControls.replaceChildren();
- for(const name of ['Arohi','Naina']){
+ for(const name of mainCast){
  const speaking=director?.speaking?.[name]!==false;
  const control=document.createElement('button');control.type='button';
  control.textContent=name+(speaking?' · Shaant raho':' · Ab bolo');
@@ -203,7 +221,15 @@ function render(){
  document.getElementById('restart').disabled=busy||checking;
  document.getElementById('reconnect').disabled=busy||checking;
  document.getElementById('export-chat').disabled=busy;
- document.getElementById('place').textContent='Thodi Si Chai · Episode '+(director?.episode||1)+(director?.episode_turn?' · '+director.episode_turn+'/18':'');
+ document.getElementById('place').textContent=(profile?(director?.at_station?'Devgarh Junction · Platform':profile.place):'Thodi Si Chai')+' · Episode '+(director?.episode||1)+(director?.episode_turn?' · '+director.episode_turn+'/18':'');
+ if(profile){
+ document.getElementById('casebook').hidden=false;
+ const clueList=document.getElementById('clue-list');clueList.replaceChildren();
+ const clues=director?.casebook||[];
+ if(!clues.length)line(clueList,'li','','Abhi koi clue verify nahi hua. Kisi cheez ko inspect karo ya sawaal poochho.');
+ for(const clue of clues){const entry=document.createElement('li');line(entry,'strong','',clue.title);
+ line(entry,'p','',clue.fact);line(entry,'small','', 'Discovered · turn '+clue.turn);clueList.append(entry);}
+ }
  document.getElementById('restart').textContent='Start updated story';
  mode.textContent=busy?'Gemma is writing…':connected?'Team review · Gemma 26B':'Preview · Model connection required';
  status.textContent=error||(busy?'Writing the next scene…':checking?'Checking the review server…':
@@ -233,7 +259,7 @@ async function connect(){
  }
  checking=true;render();
  try{
- const response=await fetch('/api/status',{signal:AbortSignal.timeout(60000)});
+ const response=await fetch(apiBase+'/api/status',{signal:AbortSignal.timeout(60000)});
  if(!response.ok)throw Error('The review server did not answer. Reload the page and try again.');
  const data=await response.json();
  if(!data.configured)throw Error((data.error||'Provider key is not configured.'));
@@ -257,7 +283,7 @@ async function send(text){
  const messages=state.messages.map(m=>m.role==='user'?{role:'user',content:m.text}:
  {role:'assistant',content:JSON.stringify({narration:m.narration,character_actions:m.character_actions||[],dialogue:m.dialogue,suggested_replies:m.suggested_replies})});
  messages.push({role:'user',content:text});
- const result=await fetch('/api/story',{
+ const result=await fetch(apiBase+'/api/story',{
  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:requestId}),
  signal:activeController.signal
  });
@@ -292,11 +318,11 @@ document.getElementById('reconnect').addEventListener('click',connect);
 document.getElementById('retry-message').addEventListener('click',()=>send(state.pending?.text||input.value));
 document.getElementById('cancel-request').addEventListener('click',()=>activeController?.abort());
 document.getElementById('export-chat').addEventListener('click',()=>{
- const report={title:'Kal Phir Miloge?',exported_at:new Date().toISOString(),configured_model:'google/gemma-4-26b-a4b-it',memory:'browser-history',attempts:state.attempts,
+ const report={title:profile?.title||'Kal Phir Miloge?',story_id:profile?.id||'cafe',exported_at:new Date().toISOString(),configured_model:'google/gemma-4-26b-a4b-it',memory:'browser-history',attempts:state.attempts,
  live_turns:state.messages.filter(m=>m.source==='gemma').length,messages:state.messages};
  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob);
- const anchor=document.createElement('a');anchor.href=url;anchor.download='kal-phir-miloge-review.json';anchor.click();
+ const anchor=document.createElement('a');anchor.href=url;anchor.download=profile?.export_name||'kal-phir-miloge-review.json';anchor.click();
  URL.revokeObjectURL(url);
 });
 render();

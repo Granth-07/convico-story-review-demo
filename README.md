@@ -4,6 +4,18 @@ This service is independent of the main Convico application. It contains the ori
 Hinglish café story, three suggested replies plus free text, and direct Gemma 26B calls.
 The provider key stays on the server. Each browser keeps its own story history.
 
+## The Last Train
+
+A second, original grounded thriller is available at `/last-train/` after deploying
+this version. It has Meera and Kabir, an authored mystery, action-earned clues,
+its own casebook and browser storage, and train-specific supporting characters.
+The cafe remains at `/`. Both stories share the existing reviewer credentials,
+funded provider configuration, process request budget and single-call work gate.
+See `TRAIN-REVIEW.md` for setup, feature coverage and live acceptance.
+
+For local play, set the funded provider key privately and run `npm run dev`.
+Open `http://127.0.0.1:8789/last-train/` for the thriller or `/` for the cafe.
+
 ## Updated story (revision 7)
 
 - The cast validator now accepts relevant supporting roles, rather than failing
@@ -68,7 +80,8 @@ Follow `REVIEW-CHECKLIST.md` for live acceptance after deployment.
 ## Update the existing Render service
 
 Copy this folder's source changes into the existing demo Git checkout, including
-the NEW `story-world.mjs` as well as `story-director.mjs` and `story.test.mjs`. Run `npm test`, review `git diff`,
+the NEW `train-engine.mjs`, `train-prompt.txt`, `train.test.mjs` and `TRAIN-REVIEW.md`,
+as well as `story-world.mjs`, `story-director.mjs` and the shared server/UI. Run `npm test`, review `git diff`,
 then commit and push to its connected branch yourself. Do not stage `.env`,
 credentials or chat exports. Keep all existing Render secrets configured.
 

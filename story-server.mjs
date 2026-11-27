@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {buildDirector,directorMessage,enforceSpeakers,placeCharacterActions,revision} from './story-director.mjs';
 import {canonicalCharacter} from './story-world.mjs';
+import {trainPack} from './train-engine.mjs';
 
 const page=new URL('./story.html',import.meta.url);
 const prompt=await readFile(new URL('./story-prompt.txt',import.meta.url),'utf8');
@@ -18,7 +19,7 @@ export function config(env=process.env){
  endpoint:provider==='openrouter'?'https://openrouter.ai/api/v1/chat/completions':'https://api.deepinfra.com/v1/openai/chat/completions'};
 }
 
-export function validateStory(value){
+export function validateStory(value,{canonical=canonicalCharacter}={}){
  const strings=(items,min,max)=>Array.isArray(items)&&items.length>=min&&items.length<=max&&
  items.every(s=>typeof s==='string'&&s.trim()&&s.length<=2000);
  if(!value||!strings(value.narration,0,6)||!Array.isArray(value.dialogue)||value.dialogue.length>8||
@@ -34,8 +35,8 @@ export function validateStory(value){
  if(/local demo|system prompt|api key|connect.*gemma|gemma.*connect/i.test(visible))throw Error('The model put setup instructions inside the story. The reply was rejected.');
  const suggestions=[...new Set(value.suggested_replies.map(s=>s.trim()))];
  for(const option of ['Main agla pal dekhta hoon.','Main poochta hoon ki ab kya hoga.','Main thoda waqt leta hoon.'])if(suggestions.length<3&&!suggestions.includes(option))suggestions.push(option);
- const dialogue=value.dialogue.map(d=>({character:canonicalCharacter(d.character),text:d.text,actions:d.actions||[]})).filter(d=>d.character);
- const actions=(value.character_actions||[]).map(a=>({character:canonicalCharacter(a.character),text:a.text})).filter(a=>a.character);
+ const dialogue=value.dialogue.map(d=>({character:canonical(d.character),text:d.text,actions:d.actions||[]})).filter(d=>d.character);
+ const actions=(value.character_actions||[]).map(a=>({character:canonical(a.character),text:a.text})).filter(a=>a.character);
  if(!value.narration.length&&!dialogue.length&&!actions.length)throw Error('No valid scene content was returned. Your draft is kept.');
  return {narration:value.narration,dialogue,character_actions:actions,suggested_replies:suggestions,
   episode_hook:typeof value.episode_hook==='string'?value.episode_hook.slice(0,350):null};
@@ -87,10 +88,11 @@ function reply(res,code,data){
  res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
  res.end(JSON.stringify(data));
 }
-export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publicOrigin,reserveRequest=()=>true,requestTimeoutMs=120000}={}){
+export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publicOrigin,reserveRequest=()=>true,requestTimeoutMs=120000,storyPack=null,workGate}={}){
  const origin=publicOrigin||'http://127.0.0.1:'+port;
  const expectedHost=new URL(origin).host;
- let busy=false;
+ const gate=workGate||{busy:false};
+ const engine=storyPack||{buildDirector,directorMessage,enforceSpeakers,placeCharacterActions};
  const requests=new Map();
  return http.createServer(async(req,res)=>{
  let telemetry=null,ownsRequest=false,job=null;
@@ -103,9 +105,10 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  if(req.method==='GET'&&req.url==='/'){
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
  'Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"});
- res.end(await readFile(page));return;
+ const profile=JSON.stringify(storyPack?.publicProfile||null).replace(/</g,'\\u003c');
+ res.end((await readFile(page,'utf8')).replace('/*__STORY_PROFILE__*/ null',profile));return;
  }
- if(req.method==='GET'&&req.url==='/api/status')return respond(200,{revision,configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
+ if(req.method==='GET'&&req.url==='/api/status')return respond(200,{revision,story:storyPack?.id||'cafe',configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
  error:settings.key?null:'Set '+(settings.provider==='openrouter'?'OPENROUTER_API_KEY':'DEEPINFRA_API_KEY')+' to a funded test key in PowerShell, then restart this demo.'});
  if(req.method!=='POST'||req.url!=='/api/story')return respond(404,{error:'Page not found.'});
  if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))return respond(403,{error:'Use the demo page at '+origin});
@@ -128,17 +131,17 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
   return respond(result.code,{...result.data,replayed:true});
  }
  // Recheck after reading the body to prevent two simultaneous uploads acquiring the lock.
- if(busy)return respond(429,{error:'A story request is already running.'});
+ if(gate.busy)return respond(429,{error:'A story request is already running. Your draft is kept; retry when it finishes.'});
  if(!reserveRequest())return respond(429,{error:'This review instance reached its model request limit. Contact Granth.'});
  if(requestId){
   while(requests.size>=128){const oldest=[...requests].find(([,entry])=>entry.completed);if(!oldest)break;requests.delete(oldest[0]);}
   job={digest,created:Date.now(),completed:false};job.promise=new Promise(resolve=>{job.resolve=resolve;});requests.set(requestId,job);
  }
- busy=true;ownsRequest=true;
- const director=buildDirector(messages);
+ gate.busy=true;ownsRequest=true;
+ const director=engine.buildDirector(messages);
  const started=Date.now();
  const response=await fetcher(settings.endpoint,{method:'POST',headers:{Authorization:'Bearer '+settings.key,'Content-Type':'application/json'},
- body:JSON.stringify({model:settings.model,messages:[{role:'system',content:prompt+'\n\n'+directorMessage(director).content},...messages],max_tokens:1100,temperature:0.65,
+ body:JSON.stringify({model:settings.model,messages:[{role:'system',content:(storyPack?.prompt||prompt)+'\n\n'+engine.directorMessage(director).content},...messages],max_tokens:1100,temperature:0.65,
  stream:true,stream_options:{include_usage:true}}),signal:AbortSignal.timeout(requestTimeoutMs),redirect:'error'});
  if(!response.ok){
  await response.body?.cancel();
@@ -157,22 +160,35 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  let content=result.text.trim();
  if(content.startsWith('```'))content=content.slice(3).replace(/^json\s*/i,'').replace(/```\s*$/,'').trim();
  let story;
- try{story=placeCharacterActions(enforceSpeakers(validateStory(JSON.parse(content)),director));}catch(error){return respond(502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
+ try{story=engine.placeCharacterActions(engine.enforceSpeakers(validateStory(JSON.parse(content),{canonical:storyPack?.canonical||canonicalCharacter}),director));}catch(error){return respond(502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
  if(director.episode_turn===18)story.episode_end={episode:director.episode,
   hook:story.episode_hook||'Yahin ek viraam. Agle episode mein isi kahani ko aage badha sakte ho.'};
  // Return public controls only; private director/backstory notes stay on the server.
- return respond(200,{story,director:{revision,turn:director.turn,episode:director.episode,episode_turn:director.episode_turn,speaking:director.speaking,phase:director.world.phase},configured_model:settings.model,model:result.reportedModel,telemetry});
+ return respond(200,{story,story_id:storyPack?.id||'cafe',director:{revision,turn:director.turn,episode:director.episode,episode_turn:director.episode_turn,speaking:director.speaking,phase:director.world.phase,
+  ...(storyPack?.publicDirector?.(director)||{})},configured_model:settings.model,model:result.reportedModel,telemetry});
  }catch(error){
  respond(502,{error:error.name==='TimeoutError'?'The model timed out. Your message is kept; usage may still have been charged.':'Could not complete the model request. Your message is kept for retry.',telemetry});
- }finally{if(ownsRequest)busy=false;}
+ }finally{if(ownsRequest)gate.busy=false;}
+ });
+}
+
+export function createStoryCollection(options={}){
+ const workGate={busy:false};
+ const cafe=createDemoServer({...options,workGate});
+ const train=createDemoServer({...options,workGate,storyPack:trainPack});
+ return http.createServer((req,res)=>{
+  if(req.url==='/last-train'){res.writeHead(302,{Location:'/last-train/'});res.end();return;}
+  if(req.url.startsWith('/last-train/')){req.url=req.url.slice('/last-train'.length);train.emit('request',req,res);}
+  else cafe.emit('request',req,res);
  });
 }
 
 if(process.argv[1]===fileURLToPath(import.meta.url)){
- const settings=config();const server=createDemoServer({settings});
+ const settings=config();const server=createStoryCollection({settings});
  server.on('error',error=>{console.error(error.code==='EADDRINUSE'?'Port 8789 is in use. Stop the previous demo with Ctrl+C.':error.message);process.exitCode=1;});
  server.listen(8789,'127.0.0.1',()=>{
  console.log('Kal Phir Miloge? Standalone demo: http://127.0.0.1:8789/');
+ console.log('The Last Train: http://127.0.0.1:8789/last-train/');
  console.log('Provider: '+settings.provider+' | Configured model: '+settings.model);
  console.log(settings.key?'Key is configured; billing and generation are checked on your first send.':'Missing funded API key. See START-HERE.txt.');
  console.log('No Convico application endpoint is called. Ctrl+C stops this demo.');

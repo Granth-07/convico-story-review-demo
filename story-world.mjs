@@ -1,6 +1,7 @@
 // Story-specific casting: supporting roles must belong to this setting.
 const policies={
  cafe:{setting:'Present-day Mumbai cafe',roles:['Customer','Neighbour','Delivery Rider','Friend','Police Officer','Paramedic','Doctor','Firefighter']},
+ train:{setting:'Present-day fictional Indian overnight train, coach C7',roles:['Passenger','Train Guard','Station Staff','Police Officer','Paramedic','Doctor']},
  mythology:{setting:'Ancient mythological world',roles:['Traveller','Guard','Healer','Messenger']},
  horror:{setting:'Present-day haunted house',roles:['Neighbour','Friend','Police Officer','Paramedic','Doctor','Caretaker']}
 };
@@ -9,7 +10,8 @@ const aliases={police:'Police Officer',officer:'Police Officer',cop:'Police Offi
  'ambulance staff':'Paramedic','ambulance worker':'Paramedic',medic:'Paramedic',paramedic:'Paramedic',
  doctor:'Doctor',customer:'Customer',bystander:'Customer',neighbour:'Neighbour',neighbor:'Neighbour',
  shopkeeper:'Neighbour','delivery rider':'Delivery Rider','delivery boy':'Delivery Rider',friend:'Friend',
- firefighter:'Firefighter',traveller:'Traveller',guard:'Guard',healer:'Healer',messenger:'Messenger',caretaker:'Caretaker'};
+ firefighter:'Firefighter',traveller:'Traveller',guard:'Guard',healer:'Healer',messenger:'Messenger',caretaker:'Caretaker',
+ passenger:'Passenger','train guard':'Train Guard','station staff':'Station Staff','railway police':'Police Officer'};
 const crossover=/\b(?:iron\s*man|thanos|salman\s*khan|batman|superman|spider[ -]?man)\b/i;
 export function worldPolicy(kind='cafe'){
  if(!policies[kind])throw Error('Unknown story setting.');
@@ -125,6 +127,9 @@ const essential={
  'Police Officer':{actions:['Kuch waqt baad pahuncha police officer scene ko dekhta hai.'],text:'Yahan kya hua? Main gawahon ki baat bhi sununga. Pehle medical team ko apna kaam karne dein.'},
  Paramedic:{actions:['Pahunchi medical team haalat ka jaayza leti hai.'],text:'Hum assessment kar rahe hain. Abhi kisi ki haalat ka nateeja maanna theek nahi hoga.'},
  Doctor:{actions:['Doctor medical assessment ki jaankari leta hai.'],text:'Main jaanch ke baad hi haalat ke baare mein kuch keh sakta hoon.'},
+ Passenger:{actions:['Passenger tumhari baat sunne ke liye mudta hai.'],text:'Aap kuch poochhna chahte hain? Batayiye.'},
+ 'Train Guard':{actions:['Guard coach tak aakar staff radio uthata hai.'],text:'Main agle station ke staff ko khabar kar raha hoon. Aap mujhe batayein, yahan kya hua?'},
+ 'Station Staff':{actions:['Platform par station staff baat sunne ke liye rukta hai.'],text:'Aap is coach se aaye hain? Bataiye, kis baat mein madad chahiye?'},
  Friend:{actions:['Tumhara dost tumhari taraf mudta hai.'],text:'Main tumhari baat sun raha hoon. Kya hua?'},
  'Delivery Rider':{actions:['Delivery rider darwaaze ke paas rukta hai.'],text:'Delivery kahan rakhni hai?'},
  Firefighter:{actions:['Firefighter mauke par haalat ka jaayza leta hai.'],text:'Yahan kya hua? Kya koi abhi andar hai?'}
@@ -138,17 +143,18 @@ export function ensureWorldBeats(story,world){
  const before=narration.length;
  narration=narration.filter(t=>!impossibleArrival(t));
  if(narration.length!==before){
-  narration.push('Café ki is duniya mein yeh baat ek kalpana reh jaati hai; scene apne maujooda logon ke saath aage badhta hai.');
+  narration.push((world.kind==='train'?'Train':'Café')+' ki is duniya mein yeh baat ek kalpana reh jaati hai; scene apne maujooda logon ke saath aage badhta hai.');
   corrections.push('removed_out_of_world_arrival');
  }
  dialogue=dialogue.filter(d=>!impossibleArrival(d.text));
  characterActions=characterActions.filter(a=>!impossibleArrival(a.text));
  if(dialogue.length!==story.dialogue.length)corrections.push('removed_unassessed_medical_claim');
  if((world.boundary||world.incident)&&world.requested_contact){
-  dialogue=dialogue.filter(d=>!['Arohi','Naina'].includes(d.character));
+  const mainCast=world.main_cast||['Arohi','Naina'];
+  dialogue=dialogue.filter(d=>!mainCast.includes(d.character));
   narration=narration.filter(t=>!/\b(?:hug|gale|baahon|embrace|kandhe|sparsh)\b/i.test(t));
-  characterActions=characterActions.filter(a=>!['Arohi','Naina'].includes(a.character));
-  characterActions.push({character:'Arohi',text:'Arohi apni doori banaye rakhti hai. Pichhli ghatna ke baad uski marzi ko waqt aur jagah chahiye.'});
+  characterActions=characterActions.filter(a=>!mainCast.includes(a.character));
+  characterActions.push({character:mainCast[0],text:mainCast[0]+' apni doori banaye rakhti hai. Pichhli ghatna ke baad uski marzi ko waqt aur jagah chahiye.'});
   corrections.push('preserved_contact_boundary');
  }
  if(world.party_reset_requested){
@@ -159,7 +165,8 @@ export function ensureWorldBeats(story,world){
  }
  for(const role of world.required_speakers){
   if(!dialogue.some(d=>d.character===role)){
-   dialogue.push({character:role,...essential[role]});corrections.push('essential_response:'+role);
+   const entry=world.essential_lines?.[role]||essential[role];
+   if(entry){dialogue.push({character:role,...entry});corrections.push('essential_response:'+role);}
   }
  }
  const priority=world.required_speakers.map(role=>dialogue.find(d=>d.character===role)).filter(Boolean);

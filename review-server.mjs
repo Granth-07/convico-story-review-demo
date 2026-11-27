@@ -1,7 +1,7 @@
 import http from 'node:http';
 import {createHash,timingSafeEqual} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {createDemoServer,config} from './story-server.mjs';
+import {createStoryCollection,config} from './story-server.mjs';
 
 export function createReviewServer({password,publicOrigin,maxRequests=100,settings=config(),fetcher=fetch}={}){
  if(typeof password!=='string'||password.length<16)throw Error('Set DEMO_REVIEW_PASSWORD to at least 16 characters.');
@@ -11,7 +11,7 @@ export function createReviewServer({password,publicOrigin,maxRequests=100,settin
  if(!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>1000)throw Error('DEMO_MAX_REQUESTS must be an integer from 1 to 1000.');
  const expected=createHash('sha256').update('reviewer:'+password).digest();
  let attempts=0;
- const core=createDemoServer({settings,fetcher,publicOrigin:location.origin,reserveRequest:()=>{
+ const core=createStoryCollection({settings,fetcher,publicOrigin:location.origin,reserveRequest:()=>{
   if(attempts>=maxRequests)return false;
   attempts++;return true;
  }});
