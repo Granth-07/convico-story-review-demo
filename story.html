@@ -41,7 +41,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 .dialogue{margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .dialogue strong{display:block;color:var(--rose);font-size:12px;letter-spacing:.03em;margin-bottom:3px}
 #log{height:430px}.cast strong{color:var(--ink)}.cast p{font-size:14px;margin:0 0 12px}
-@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}.speaker-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}.speaker-controls button{font:inherit;font-size:12px;background:#3b2b30;color:var(--rose);border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}.speaker-controls button:disabled{cursor:wait}#version-note{padding:10px;border:1px solid var(--line);border-radius:8px}</style>
+@media(max-width:760px){#log{height:44vh;min-height:270px}.story-turn{padding:13px}}.connection{margin-top:13px;color:var(--muted);font-size:12px}.connection p{margin:8px 0}.connection button{background:transparent;color:var(--rose);border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}summary{cursor:pointer}button:disabled{opacity:.5;cursor:wait}.response-source{display:block;margin-top:12px;font-size:10px;color:var(--muted)}.connection a{color:var(--rose)}#status[role=alert]{color:#ffcfb6}.chat-head{flex-wrap:wrap}.chat-head span{margin-right:auto}#send-button:disabled{opacity:.45;cursor:not-allowed}#metrics{line-height:1.6;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}.connection{font-size:12px;color:var(--muted)}.connection p{margin:8px 0}#log{scroll-behavior:smooth}.speaker-controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}.speaker-controls button{font:inherit;font-size:12px;background:#3b2b30;color:var(--rose);border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}.speaker-controls button:disabled{cursor:wait}#version-note{padding:10px;border:1px solid var(--line);border-radius:8px}.send-feedback{padding:12px;border:1px solid #edb09e;border-radius:10px;background:#503136;color:#ffe2ce;white-space:pre-wrap;margin-bottom:10px}#retry-message,#cancel-request{background:transparent;color:var(--rose);border:1px solid var(--line);padding:9px;border-radius:8px;margin-bottom:10px;cursor:pointer}.character-scene{border-left:2px solid var(--line);padding-left:10px;margin-top:13px}.character-scene .scene-copy{margin-bottom:5px}#send-button{min-width:105px}.episode-ending{margin-top:16px;padding:12px;border-top:1px solid var(--rose);color:var(--rose)}.episode-ending p{margin-bottom:0}</style>
 </head>
 <body>
 <main>
@@ -63,6 +63,9 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 <p class="hint">Kisi ko shaant rehne ko keh sakte ho. Dobara bulane tak woh nahi bolegi.</p>
 <p class="hint">Kisi reply par tap karke bhejo</p>
 <div id="suggestions" aria-label="Teen suggested replies"></div>
+<div id="send-feedback" class="send-feedback" role="alert" hidden></div>
+<button id="retry-message" type="button" hidden>Dobara bhejo</button>
+<button id="cancel-request" type="button" hidden>Stop waiting · draft rakho</button>
 <form id="composer">
 <label for="message">Ya apna jawab likho</label>
 <div class="input-row"><textarea id="message" rows="2" maxlength="1500" placeholder="Arohi, pehle batao café ka naam kisne rakha?" required></textarea><button class="send" id="send-button" type="submit">Bhejo ↗</button></div>
@@ -91,30 +94,36 @@ const opening={
  ]
 };
 function validStory(story){
- return story&&Array.isArray(story.narration)&&story.narration.length>=2&&story.narration.length<=3&&
+ return story&&Array.isArray(story.narration)&&story.narration.length<=6&&
  story.narration.every(t=>typeof t==='string'&&t.trim())&&
- Array.isArray(story.dialogue)&&story.dialogue.length<=3&&
- story.dialogue.every(d=>d&&typeof d.character==='string'&&d.character.trim()&&typeof d.text==='string'&&d.text.trim())&&
+ Array.isArray(story.dialogue)&&story.dialogue.length<=8&&
+ story.dialogue.every(d=>d&&typeof d.character==='string'&&d.character.trim()&&typeof d.text==='string'&&d.text.trim()&&
+ (d.actions===undefined||(Array.isArray(d.actions)&&d.actions.every(t=>typeof t==='string'))))&&
+ (story.character_actions===undefined||(Array.isArray(story.character_actions)&&story.character_actions.every(a=>a&&typeof a.character==='string'&&typeof a.text==='string')))&&
  Array.isArray(story.suggested_replies)&&story.suggested_replies.length===3&&
  story.suggested_replies.every(t=>typeof t==='string'&&t.trim());
 }
 function initial(){
- return {version:6,legacy:false,messages:[{role:'story',...structuredClone(opening),source:'opening'}],attempts:[]};
+ return {version:7,legacy:false,pending:null,messages:[{role:'story',...structuredClone(opening),source:'opening'}],attempts:[]};
 }
 let state=initial();
 try{
  const saved=JSON.parse(localStorage.getItem(storageKey));
- if(saved&&[5,6].includes(saved.version)&&Array.isArray(saved.messages)&&saved.messages.length&&
+ if(saved&&[5,6,7].includes(saved.version)&&Array.isArray(saved.messages)&&saved.messages.length&&
  saved.messages[0].role==='story'&&saved.messages[0].source==='opening'&&
  saved.messages.every((m,i)=>m&&(i%2===0?m.role==='story'&&validStory(m)&&(i===0||m.source==='gemma'):m.role==='user'&&typeof m.text==='string'&&m.text.trim()))&&
- saved.messages.length%2===1&&Array.isArray(saved.attempts))state={...saved,version:6,legacy:saved.version===5||Boolean(saved.legacy)};
+ saved.messages.length%2===1&&Array.isArray(saved.attempts)){
+ state={...saved,version:7,legacy:saved.version<7||Boolean(saved.legacy)};
+ if(!state.pending||typeof state.pending.text!=='string'||state.pending.text.length>1500)state.pending=null;
+ }
 }catch{}
 const log=document.getElementById('log');
 const options=document.getElementById('suggestions');
 const input=document.getElementById('message');
 const status=document.getElementById('status');
 const mode=document.getElementById('mode-label');
-let connected=false,checking=false,busy=false,error='',pendingText='';
+let connected=false,checking=false,busy=false,error='',pendingText='',activeController=null;
+if(state.pending){input.value=state.pending.text;error=state.pending.error||'Your previous message is saved as a draft. Retry to check its result.';}
 
 function save(){
  try{localStorage.setItem(storageKey,JSON.stringify(state));}
@@ -148,10 +157,22 @@ function render(){
  article.className='story-turn';
  const scene=document.createElement('div');scene.className='scene-copy';
  message.narration.forEach(text=>line(scene,'p','',text));article.append(scene);
+ const looseActions=message.character_actions||[];
+ for(const action of looseActions.filter(a=>!message.dialogue.some(d=>d.character===a.character))){
+ const actionBlock=document.createElement('div');actionBlock.className='character-scene';
+ line(actionBlock,'small','speaker',action.character+' · action');line(actionBlock,'p','scene-copy',action.text);article.append(actionBlock);
+ }
  for(const {character,text} of message.dialogue){
+ const entry=message.dialogue.find(d=>d.character===character&&d.text===text);
+ const actionLines=[...looseActions.filter(a=>a.character===character).map(a=>a.text),...(entry.actions||[])];
+ if(actionLines.length){const actions=document.createElement('div');actions.className='character-scene';
+ actionLines.forEach(t=>line(actions,'p','scene-copy',t));article.append(actions);}
  const dialogue=document.createElement('p');dialogue.className='dialogue';
  line(dialogue,'strong','',character);line(dialogue,'span','',text);article.append(dialogue);
  }
+ if(message.episode_end){const ending=document.createElement('div');ending.className='episode-ending';
+ line(ending,'strong','','Episode '+message.episode_end.episode+' · Reading pause');
+ line(ending,'p','',message.episode_end.hook);article.append(ending);}
  if(message.source==='gemma')line(article,'small','response-source',message.model?'Reported model: '+message.model:'Gemma 26B configured · provider model unreported');
  }
  log.append(article);
@@ -161,6 +182,10 @@ function render(){
  line(pending,'span','speaker','Tum · Sending');
  line(pending,'p','bubble',pendingText);log.append(pending);
  }
+ if(!busy&&state.pending){
+ const draft=document.createElement('article');draft.className='message player';
+ line(draft,'span','speaker','Tum · Draft saved');line(draft,'p','bubble',state.pending.text);log.append(draft);
+ }
  const suggestions=state.messages.at(-1).suggested_replies;
  for(const text of suggestions){
  const button=document.createElement('button');button.type='button';button.textContent=text;
@@ -169,10 +194,16 @@ function render(){
  }
  input.disabled=busy||checking;
  document.getElementById('send-button').disabled=!connected||busy||checking;
+ document.getElementById('send-button').textContent=busy?'Bhej rahe hain…':'Bhejo ↗';
+ document.getElementById('send-feedback').hidden=!error;
+ document.getElementById('send-feedback').textContent=error;
+ document.getElementById('retry-message').hidden=busy||!state.pending||!error;
+ document.getElementById('retry-message').disabled=!connected||checking;
+ document.getElementById('cancel-request').hidden=!busy;
  document.getElementById('restart').disabled=busy||checking;
  document.getElementById('reconnect').disabled=busy||checking;
  document.getElementById('export-chat').disabled=busy;
- document.getElementById('place').textContent='Thodi Si Chai · Episode '+(director?.episode||1);
+ document.getElementById('place').textContent='Thodi Si Chai · Episode '+(director?.episode||1)+(director?.episode_turn?' · '+director.episode_turn+'/18':'');
  document.getElementById('restart').textContent='Start updated story';
  mode.textContent=busy?'Gemma is writing…':connected?'Team review · Gemma 26B':'Preview · Model connection required';
  status.textContent=error||(busy?'Writing the next scene…':checking?'Checking the review server…':
@@ -195,14 +226,14 @@ function render(){
 }
 async function connect(){
  if(busy||checking)return;
- connected=false;error='';
+ connected=false;if(!state.pending)error='';
  if(location.protocol==='file:'){
  error='This file previews the opening only. Start the supplied server, then open http://127.0.0.1:8789/ for AI chat.';
  render();return;
  }
  checking=true;render();
  try{
- const response=await fetch('/api/status',{signal:AbortSignal.timeout(5000)});
+ const response=await fetch('/api/status',{signal:AbortSignal.timeout(60000)});
  if(!response.ok)throw Error('The review server did not answer. Reload the page and try again.');
  const data=await response.json();
  if(!data.configured)throw Error((data.error||'Provider key is not configured.'));
@@ -215,17 +246,23 @@ async function send(text){
  text=text.trim();
  if(!text||busy||checking)return;
  if(!connected){error='Connect the supplied Gemma server before sending.';render();return;}
- busy=true;pendingText=text;input.value=text;error='';render();
+ const requestId=state.pending?.text===text&&state.pending.request_id?state.pending.request_id:crypto.randomUUID();
+ state.pending={text,request_id:requestId,error:null};
+ busy=true;pendingText=text;input.value=text;error='';save();render();
+ activeController=new AbortController();
+ const timeout=setTimeout(()=>activeController?.abort(),145000);
  let recordedAttempt=false;
+ let receivedResponse=false;
  try{
  const messages=state.messages.map(m=>m.role==='user'?{role:'user',content:m.text}:
- {role:'assistant',content:JSON.stringify({narration:m.narration,dialogue:m.dialogue,suggested_replies:m.suggested_replies})});
+ {role:'assistant',content:JSON.stringify({narration:m.narration,character_actions:m.character_actions||[],dialogue:m.dialogue,suggested_replies:m.suggested_replies})});
  messages.push({role:'user',content:text});
  const result=await fetch('/api/story',{
- method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages}),
- signal:AbortSignal.timeout(145000)
+ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:requestId}),
+ signal:activeController.signal
  });
  const data=await result.json();
+ receivedResponse=true;
  state.attempts.push({at:new Date().toISOString(),http_ok:result.ok,accepted:false,telemetry:data.telemetry??null,error:data.error??null});recordedAttempt=true;save();
  if(!result.ok)throw Error(data.error||'Gemma request failed. Your message is kept for retry.');
  if(!validStory(data.story))throw Error('Gemma returned an incomplete scene. Your message is kept for retry.');
@@ -233,13 +270,14 @@ async function send(text){
  if(data.model&&data.model.toLowerCase()!=='google/gemma-4-26b-a4b-it')throw Error('Provider reported an unexpected model. Review before continuing.');
  state.messages.push({role:'user',text},{role:'story',...data.story,source:'gemma',director:data.director,
  model:data.model,telemetry:data.telemetry??null});
- state.attempts.at(-1).accepted=true;save();input.value='';
+ state.attempts.at(-1).accepted=true;state.pending=null;save();input.value='';
  }catch(failure){
  if(!recordedAttempt)state.attempts.push({at:new Date().toISOString(),http_ok:false,accepted:false,telemetry:null,error:failure.message});
  else state.attempts.at(-1).error=failure.message;
- save();
- error=failure.name==='TimeoutError'?'Gemma timed out. Your message is kept for retry.':failure.message;
- }finally{busy=false;pendingText='';render();input.focus();}
+ error=['TimeoutError','AbortError'].includes(failure.name)?'Waiting stopped. Your draft is saved. Retry checks the same request while this server still retains it.':failure.message;
+ if(!receivedResponse)error+=' The result is unconfirmed; keep the same message to check the same request.';
+ state.pending={text,request_id:receivedResponse?null:requestId,error};save();
+ }finally{clearTimeout(timeout);activeController=null;busy=false;pendingText='';render();input.focus();}
 }
 document.getElementById('composer').addEventListener('submit',event=>{event.preventDefault();send(input.value);});
 input.addEventListener('keydown',event=>{
@@ -251,6 +289,8 @@ document.getElementById('restart').addEventListener('click',()=>{
  state=initial();input.value='';error='';save();render();
 });
 document.getElementById('reconnect').addEventListener('click',connect);
+document.getElementById('retry-message').addEventListener('click',()=>send(state.pending?.text||input.value));
+document.getElementById('cancel-request').addEventListener('click',()=>activeController?.abort());
 document.getElementById('export-chat').addEventListener('click',()=>{
  const report={title:'Kal Phir Miloge?',exported_at:new Date().toISOString(),configured_model:'google/gemma-4-26b-a4b-it',memory:'browser-history',attempts:state.attempts,
  live_turns:state.messages.filter(m=>m.source==='gemma').length,messages:state.messages};

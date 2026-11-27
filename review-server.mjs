@@ -10,8 +10,11 @@ export function createReviewServer({password,publicOrigin,maxRequests=100,settin
  if(location.username||location.password||location.pathname!=='/'||location.search||location.hash)throw Error('Use only the public site origin.');
  if(!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>1000)throw Error('DEMO_MAX_REQUESTS must be an integer from 1 to 1000.');
  const expected=createHash('sha256').update('reviewer:'+password).digest();
- const core=createDemoServer({settings,fetcher,publicOrigin:location.origin});
  let attempts=0;
+ const core=createDemoServer({settings,fetcher,publicOrigin:location.origin,reserveRequest:()=>{
+  if(attempts>=maxRequests)return false;
+  attempts++;return true;
+ }});
  return http.createServer((req,res)=>{
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('Referrer-Policy','no-referrer');
@@ -27,13 +30,6 @@ export function createReviewServer({password,publicOrigin,maxRequests=100,settin
  if(!timingSafeEqual(actual,expected)){
  res.writeHead(401,{'WWW-Authenticate':'Basic realm="Convico story review", charset="UTF-8"','Content-Type':'text/plain','Cache-Control':'no-store'});
  res.end('Enter the reviewer username and password supplied by Granth.');return;
- }
- if(req.method==='POST'&&req.url==='/api/story'){
- if(attempts>=maxRequests){
- res.writeHead(429,{'Content-Type':'application/json','Cache-Control':'no-store'});
- res.end(JSON.stringify({error:'This review instance reached its request limit. Contact Granth.'}));return;
- }
- attempts++;
  }
  core.emit('request',req,res);
  });

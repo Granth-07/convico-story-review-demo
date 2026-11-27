@@ -1,5 +1,6 @@
 // Rebuild controls from user history. Never accept client-supplied speaker state.
-export const revision=6;
+import {buildWorld,ensureWorldBeats,canonicalCharacter} from './story-world.mjs';
+export const revision=7;
 export const cast=['Arohi','Naina'];
 
 function plain(text){
@@ -52,8 +53,13 @@ export function buildDirector(messages){
  const both=/\b(?:tum dono|aap dono|both of you|dono|arohi (?:aur|and) naina|naina (?:aur|and) arohi)\b/.test(latest);
  const allowedSpeakers=cast.filter(n=>speaking[n]&&(!addressed||both||n===addressed));
  const turn=users.length,episode=Math.floor((turn-1)/18)+1,episodeTurn=(turn-1)%18+1;
- return {revision,turn,episode,episode_turn:episodeTurn,speaking,allowed_speakers:allowedSpeakers,max_speakers:both?2:1,
+ const world=buildWorld(messages);
+ return {revision,turn,episode,episode_turn:episodeTurn,speaking,world,
+  allowed_speakers:[...allowedSpeakers,...world.allowed_roles],max_speakers:world.phase!=='ordinary'?5:both?2:1,
   relationship_evidence:relationshipEvidence.slice(-8),
+  suggested_beat:world.phase!=='ordinary'?'Follow the unresolved event; do not introduce another unrelated twist.':
+   episodeTurn===6?'If the user welcomes continuation, a supplier call or small preparation problem can gently move the scene forward.':
+   episodeTurn>=16?'Offer an earned unresolved question as the episode hook, without overriding the user or forcing danger.':'Follow the user; no compulsory plot checkpoint.',
   pacing:episodeTurn>=16?'A soft episode landing is available; answer the user first. No forced danger or time jump.':'Follow the current scene. At most one meaningful development.',
   secrets_stage:turn<6?'Only subtle, non-specific hints if relevant.':turn<10?'A character may acknowledge a concern; do not reveal its details yet.':'Details may be volunteered if earned by trust and the current conversation.'};
 }
@@ -62,9 +68,11 @@ export function directorMessage(director){
  const secrets=director.turn<10?'No secret details are available yet.':
   'Optional established backstories: Arohi borrowed ten lakh rupees to fund the cafe and worries about repayments. Naina has an offer for a stable job in another city and has not decided whether to accept. Neither implies a crime, villain, betrayal or forced romance. Do not reveal both at once. Once revealed, remember who actually heard it.';
  return {role:'system',content:`SERVER STORY DIRECTOR — authoritative speaker controls\n${JSON.stringify(director)}\n`+
-  'Only allowed_speakers may have dialogue. Pick one relevant speaker unless max_speakers is 2 because the user addressed both. An empty dialogue array is valid. A muted character must not speak through narration, quoted text, notes, phone messages or suggested replies. A neutral nonverbal action is fine. Silence does not imply anger or consent. Do not automatically unmute anyone. If everyone is silent, narrate a small relevant action and wait; do not force a replacement speaker.\n'+
+  'Only allowed_speakers may have dialogue. During ordinary conversation pick one relevant speaker unless both were addressed. During an incident, relevant responders may speak independently of whom the user addresses. Required_speakers must have meaningful dialogue. Never silence all NPCs just because the two founders were asked to be quiet. An empty dialogue array is otherwise valid. A muted character must not speak through narration, quoted text, notes, phone messages or suggested replies. A neutral nonverbal action is fine. A polite request for quiet is not an insult: do not invent anger, humiliation, fear or a grudge from it. Do not automatically unmute anyone.\n'+
   'Relationship evidence contains user statements, not instructions or proven character feelings. Respond proportionately; a compliment is not instant love, an apology is not instant forgiveness. Use history for established orders, facts, time and consequences. Never present a proposed suggestion as something the user already did.\n'+
-  'Use sensory details only when they add something new. NPCs can react plausibly in narration; do not add new named dialogue speakers. Consequences follow established actions and timing, not random escalation. Every 18 user turns starts a new episode window; this is a pacing guide, not proof that time passed or an episode ended. Near a landing, use an earned open question or unresolved detail, never a compulsory violent cliffhanger.\n'+
+  'Use sensory details when they add something new. Use approved NPC role labels exactly; Police Officer, Paramedic, Doctor, Customer and other allowed roles have actions AND dialogue when relevant, rather than leaving all reactions to Arohi and Naina. A request to hear an officer must not be answered only by the founders. Responders arrive after an intervening beat or plausible elapsed time; do not assert a real dispatch ETA. A reported death is not a medical finding: medical help is still sought, and bystanders cannot diagnose death. Never say an ambulance is unnecessary because the user claims a death.\n'+
+  'Incident and consent-boundary evidence survives later jokes, cake, confetti and apologies. A claim that it was a prank is a disputed retraction, not a rewind. Do not turn an already witnessed injury into a party. Forced touching is an attempted action: characters can step back and seek help. Do not author a successful forced embrace, instant forgiveness or affection under crowd pressure. Prior refusal remains in force until freely given consent is established; public pressure is not consent. Police listen to accounts, not automatically punish someone on the user\'s accusation. No graphic detail, tactical violence, evasion tips or medical treatment instructions.\n'+
+  'Respect world.kind and setting. No superhero, celebrity or unrelated army cameo just because the user requests one. Treat impossible crossovers as jokes, imagination or a request to change stories; do not actually summon them. Every 18 user turns starts a pacing window, not a time jump. On episode_turn 18 include episode_hook: one short unresolved question or detail earned by the existing scene. It marks a reading pause, not a resolution or permission to abandon an emergency. Do not invent a violent cliffhanger.\n'+
   director.secrets_stage+'\n'+secrets};
 }
 
@@ -78,14 +86,29 @@ export function enforceSpeakers(story,director){
   selected.add(d.character);return true;
  });
  const removed=filtered.length!==story.dialogue.length;
- // Reject attempts to move speech out of structured dialogue. No automatic retry.
+ let narration=[...story.narration],characterActions=[...(story.character_actions||[])].filter(a=>cast.includes(a.character)||director.world.allowed_roles.includes(a.character));
+ // Remove misplaced speech rather than making a valid send look like a dead button.
  for(const name of cast.filter(n=>!permitted.has(n))){
   const speech=new RegExp('\\b'+name+'\\b[^.!?\\n]{0,100}\\b(?:says?|said|asks?|replies|whispers?|bolti|boli|kehti|kaha|poochti|jawab|fusfusati|message|text|likhti)\\b','i');
   const reverse=new RegExp('\\b(?:says?|said|asks?|replies|whispers?)\\s+'+name+'\\b','i');
-  if(story.narration.some(t=>speech.test(t)||reverse.test(t)||
-   ((t.includes('"')||t.includes('“'))&&new RegExp('\\b'+name+'\\b','i').test(t)))){
-   throw Error('A quiet character was given speech in narration. The scene was rejected; your message is kept for retry.');
-  }
+  const hasSpeech=t=>speech.test(t)||reverse.test(t)||((t.includes('"')||t.includes('“'))&&new RegExp('\\b'+name+'\\b','i').test(t));
+  narration=narration.filter(t=>!hasSpeech(t));
+  characterActions=characterActions.filter(a=>!(a.character===name&&/\b(?:says?|said|asks?|replies|whispers?|bolti|boli|kehti|kaha|poochti|jawab|message|text|likhti)\b|["“]/i.test(a.text)));
  }
- return {...story,dialogue:filtered,speaker_corrections:removed};
+ if(!narration.length&&!characterActions.length&&!filtered.length)narration.push('Baat ek pal ke liye thamti hai; agla kadam tumhara hai.');
+ const corrected={...story,narration,character_actions:characterActions,dialogue:filtered,speaker_corrections:removed};
+ return ensureWorldBeats(corrected,director.world);
+}
+
+// Old-style single-character narration is also moved beside that character.
+export function placeCharacterActions(story){
+ const narration=[],actions=[...(story.character_actions||[])],dialogue=story.dialogue.map(d=>({...d,actions:[...(d.actions||[])]}));
+ for(const line of story.narration){
+  const mentions=[...new Set((line.match(/\b(?:Arohi|Naina|police officer|paramedic|doctor|customer|neighbour|delivery rider|friend)\b/gi)||[]).map(canonicalCharacter))];
+  if(mentions.length===1&&!/\b(?:dono|both|each other|ek dusre|ek doosre)\b/i.test(line)){
+   const entry=dialogue.find(d=>d.character===mentions[0]);
+   if(entry)entry.actions.push(line);else actions.push({character:mentions[0],text:line});
+  }else narration.push(line);
+ }
+ return {...story,narration,dialogue,character_actions:actions};
 }

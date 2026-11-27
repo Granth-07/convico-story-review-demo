@@ -1,7 +1,9 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {buildDirector,directorMessage,enforceSpeakers,revision} from './story-director.mjs';
+import {createHash} from 'node:crypto';
+import {buildDirector,directorMessage,enforceSpeakers,placeCharacterActions,revision} from './story-director.mjs';
+import {canonicalCharacter} from './story-world.mjs';
 
 const page=new URL('./story.html',import.meta.url);
 const prompt=await readFile(new URL('./story-prompt.txt',import.meta.url),'utf8');
@@ -19,14 +21,24 @@ export function config(env=process.env){
 export function validateStory(value){
  const strings=(items,min,max)=>Array.isArray(items)&&items.length>=min&&items.length<=max&&
  items.every(s=>typeof s==='string'&&s.trim()&&s.length<=2000);
- if(!value||!strings(value.narration,2,3)||!Array.isArray(value.dialogue)||value.dialogue.length>3||
- !value.dialogue.every(d=>d&&['Arohi','Naina'].includes(d.character)&&typeof d.text==='string'&&d.text.trim()&&d.text.length<=2000)||
- !strings(value.suggested_replies,3,3)||new Set(value.suggested_replies.map(s=>s.trim().toLowerCase())).size!==3){
+ if(!value||!strings(value.narration,0,6)||!Array.isArray(value.dialogue)||value.dialogue.length>8||
+ !value.dialogue.every(d=>d&&typeof d.character==='string'&&d.character.trim()&&d.character.length<=80&&typeof d.text==='string'&&d.text.trim()&&d.text.length<=2000&&
+ (d.actions===undefined||strings(d.actions,0,3)))||
+ (value.character_actions!==undefined&&(!Array.isArray(value.character_actions)||value.character_actions.length>8||
+ !value.character_actions.every(a=>a&&typeof a.character==='string'&&typeof a.text==='string'&&a.text.trim()&&a.text.length<=2000)))||
+ !strings(value.suggested_replies,1,3)){
  throw Error('The model returned an incomplete scene. It was not added to the story.');
  }
- const visible=[...value.narration,...value.dialogue.map(d=>d.text)].join(' ');
+ const visible=[...value.narration,...value.dialogue.flatMap(d=>[d.text,...(d.actions||[])]),...(value.character_actions||[]).map(a=>a.text),
+ typeof value.episode_hook==='string'?value.episode_hook:''].join(' ');
  if(/local demo|system prompt|api key|connect.*gemma|gemma.*connect/i.test(visible))throw Error('The model put setup instructions inside the story. The reply was rejected.');
- return {narration:value.narration,dialogue:value.dialogue.map(d=>({character:d.character,text:d.text})),suggested_replies:value.suggested_replies};
+ const suggestions=[...new Set(value.suggested_replies.map(s=>s.trim()))];
+ for(const option of ['Main agla pal dekhta hoon.','Main poochta hoon ki ab kya hoga.','Main thoda waqt leta hoon.'])if(suggestions.length<3&&!suggestions.includes(option))suggestions.push(option);
+ const dialogue=value.dialogue.map(d=>({character:canonicalCharacter(d.character),text:d.text,actions:d.actions||[]})).filter(d=>d.character);
+ const actions=(value.character_actions||[]).map(a=>({character:canonicalCharacter(a.character),text:a.text})).filter(a=>a.character);
+ if(!value.narration.length&&!dialogue.length&&!actions.length)throw Error('No valid scene content was returned. Your draft is kept.');
+ return {narration:value.narration,dialogue,character_actions:actions,suggested_replies:suggestions,
+  episode_hook:typeof value.episode_hook==='string'?value.episode_hook.slice(0,350):null};
 }
 
 export function validateHistory(messages){
@@ -75,42 +87,63 @@ function reply(res,code,data){
  res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
  res.end(JSON.stringify(data));
 }
-export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publicOrigin}={}){
+export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publicOrigin,reserveRequest=()=>true,requestTimeoutMs=120000}={}){
  const origin=publicOrigin||'http://127.0.0.1:'+port;
  const expectedHost=new URL(origin).host;
  let busy=false;
+ const requests=new Map();
  return http.createServer(async(req,res)=>{
- let telemetry=null,ownsRequest=false;
+ let telemetry=null,ownsRequest=false,job=null;
+ const respond=(code,data)=>{
+  if(job&&!job.completed){job.completed=true;job.result={code,data};job.resolve(job.result);}
+  if(!res.writableEnded&&!res.destroyed)reply(res,code,data);
+ };
  try{
- if(req.headers.host!==expectedHost)return reply(res,403,{error:'Open '+origin});
+ if(req.headers.host!==expectedHost)return respond(403,{error:'Open '+origin});
  if(req.method==='GET'&&req.url==='/'){
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
  'Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"});
  res.end(await readFile(page));return;
  }
- if(req.method==='GET'&&req.url==='/api/status')return reply(res,200,{revision,configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
+ if(req.method==='GET'&&req.url==='/api/status')return respond(200,{revision,configured:Boolean(settings.key),model:settings.model,provider:settings.provider,
  error:settings.key?null:'Set '+(settings.provider==='openrouter'?'OPENROUTER_API_KEY':'DEEPINFRA_API_KEY')+' to a funded test key in PowerShell, then restart this demo.'});
- if(req.method!=='POST'||req.url!=='/api/story')return reply(res,404,{error:'Page not found.'});
- if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))return reply(res,403,{error:'Use the demo page at '+origin});
- if(!settings.key)return reply(res,503,{error:'A funded provider key is required. Set it in PowerShell and restart the demo.'});
- if(busy)return reply(res,429,{error:'A story request is already running. Wait for it to finish.'});
+ if(req.method!=='POST'||req.url!=='/api/story')return respond(404,{error:'Page not found.'});
+ if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))return respond(403,{error:'Use the demo page at '+origin});
+ if(!settings.key)return respond(503,{error:'A funded provider key is required. Set it in PowerShell and restart the demo.'});
  const pieces=[];let size=0;
- for await(const piece of req){size+=piece.length;if(size>500000)return reply(res,413,{error:'Conversation too large. Export it before restarting.'});pieces.push(piece);}
- let messages;
- try{messages=validateHistory(JSON.parse(Buffer.concat(pieces).toString('utf8')).messages);}
- catch(error){return reply(res,400,{error:error.message});}
+ for await(const piece of req){size+=piece.length;if(size>500000)return respond(413,{error:'Conversation too large. Export it before restarting.'});pieces.push(piece);}
+ let messages,requestId;
+ try{
+  const input=JSON.parse(Buffer.concat(pieces).toString('utf8'));
+  messages=validateHistory(input.messages);requestId=input.request_id;
+  if(requestId!==undefined&&(typeof requestId!=='string'||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)))throw Error('Invalid request identifier.');
+ }
+ catch(error){return respond(400,{error:error.message});}
+ const digest=createHash('sha256').update(JSON.stringify(messages)).digest('hex');
+ for(const [id,entry] of requests)if(entry.completed&&Date.now()-entry.created>15*60000)requests.delete(id);
+ if(requestId&&requests.has(requestId)){
+  const existing=requests.get(requestId);
+  if(existing.digest!==digest)return respond(409,{error:'This request identifier belongs to another message. Edit the draft and send again.'});
+  const result=existing.result||await existing.promise;
+  return respond(result.code,{...result.data,replayed:true});
+ }
  // Recheck after reading the body to prevent two simultaneous uploads acquiring the lock.
- if(busy)return reply(res,429,{error:'A story request is already running.'});
+ if(busy)return respond(429,{error:'A story request is already running.'});
+ if(!reserveRequest())return respond(429,{error:'This review instance reached its model request limit. Contact Granth.'});
+ if(requestId){
+  while(requests.size>=128){const oldest=[...requests].find(([,entry])=>entry.completed);if(!oldest)break;requests.delete(oldest[0]);}
+  job={digest,created:Date.now(),completed:false};job.promise=new Promise(resolve=>{job.resolve=resolve;});requests.set(requestId,job);
+ }
  busy=true;ownsRequest=true;
  const director=buildDirector(messages);
  const started=Date.now();
  const response=await fetcher(settings.endpoint,{method:'POST',headers:{Authorization:'Bearer '+settings.key,'Content-Type':'application/json'},
  body:JSON.stringify({model:settings.model,messages:[{role:'system',content:prompt+'\n\n'+directorMessage(director).content},...messages],max_tokens:1100,temperature:0.65,
- stream:true,stream_options:{include_usage:true}}),signal:AbortSignal.timeout(120000),redirect:'error'});
+ stream:true,stream_options:{include_usage:true}}),signal:AbortSignal.timeout(requestTimeoutMs),redirect:'error'});
  if(!response.ok){
  await response.body?.cancel();
  const errors={401:'The provider rejected this API key.',402:'This provider account needs credits or active billing.',429:'Provider rate limit reached. Wait before retrying.',404:'The provider could not find the configured 26B model. Confirm the model ID with Akash.'};
- return reply(res,response.status,{error:errors[response.status]||'Provider returned HTTP '+response.status+'. No automatic retry was made.'});
+ return respond(response.status,{error:errors[response.status]||'Provider returned HTTP '+response.status+'. No automatic retry was made.'});
  }
  const result=await readProvider(response.body,started);
  const providerCost=result.usage?.cost;
@@ -119,16 +152,18 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  cost_usd:typeof providerCost==='number'&&Number.isFinite(providerCost)?providerCost:null,
  cost_source:typeof providerCost==='number'&&Number.isFinite(providerCost)?'provider':'unavailable',
  first_token_ms:result.firstToken,total_duration_ms:Date.now()-started};
- if(result.reportedModel&&result.reportedModel.toLowerCase()!==settings.model.toLowerCase())return reply(res,502,{error:'The provider reported a different model. Review the configuration before continuing.',telemetry});
- if(!result.done||result.finishReason!=='stop')return reply(res,502,{error:'The provider did not complete the scene normally. Usage may still have been charged.',telemetry});
+ if(result.reportedModel&&result.reportedModel.toLowerCase()!==settings.model.toLowerCase())return respond(502,{error:'The provider reported a different model. Review the configuration before continuing.',telemetry});
+ if(!result.done||result.finishReason!=='stop')return respond(502,{error:'The provider did not complete the scene normally. Usage may still have been charged.',telemetry});
  let content=result.text.trim();
  if(content.startsWith('```'))content=content.slice(3).replace(/^json\s*/i,'').replace(/```\s*$/,'').trim();
  let story;
- try{story=enforceSpeakers(validateStory(JSON.parse(content)),director);}catch(error){return reply(res,502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
+ try{story=placeCharacterActions(enforceSpeakers(validateStory(JSON.parse(content)),director));}catch(error){return respond(502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
+ if(director.episode_turn===18)story.episode_end={episode:director.episode,
+  hook:story.episode_hook||'Yahin ek viraam. Agle episode mein isi kahani ko aage badha sakte ho.'};
  // Return public controls only; private director/backstory notes stay on the server.
- return reply(res,200,{story,director:{revision,turn:director.turn,episode:director.episode,speaking:director.speaking},configured_model:settings.model,model:result.reportedModel,telemetry});
+ return respond(200,{story,director:{revision,turn:director.turn,episode:director.episode,episode_turn:director.episode_turn,speaking:director.speaking,phase:director.world.phase},configured_model:settings.model,model:result.reportedModel,telemetry});
  }catch(error){
- reply(res,502,{error:error.name==='TimeoutError'?'The model timed out. Your message is kept; usage may still have been charged.':'Could not complete the model request. Your message is kept for retry.',telemetry});
+ respond(502,{error:error.name==='TimeoutError'?'The model timed out. Your message is kept; usage may still have been charged.':'Could not complete the model request. Your message is kept for retry.',telemetry});
  }finally{if(ownsRequest)busy=false;}
  });
 }
