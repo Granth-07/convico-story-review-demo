@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {buildDirector,directorMessage,enforceSpeakers,placeCharacterActions,revision} from './story-director.mjs';
 import {canonicalCharacter} from './story-world.mjs';
 import {trainPack} from './train-engine.mjs';
+import {sceneResponseFormat,parseSceneJson,protectImmersion} from './scene-quality.mjs';
 
 const page=new URL('./story.html',import.meta.url);
 const prompt=await readFile(new URL('./story-prompt.txt',import.meta.url),'utf8');
@@ -30,9 +31,6 @@ export function validateStory(value,{canonical=canonicalCharacter}={}){
  !strings(value.suggested_replies,1,3)){
  throw Error('The model returned an incomplete scene. It was not added to the story.');
  }
- const visible=[...value.narration,...value.dialogue.flatMap(d=>[d.text,...(d.actions||[])]),...(value.character_actions||[]).map(a=>a.text),
- typeof value.episode_hook==='string'?value.episode_hook:''].join(' ');
- if(/local demo|system prompt|api key|connect.*gemma|gemma.*connect/i.test(visible))throw Error('The model put setup instructions inside the story. The reply was rejected.');
  const suggestions=[...new Set(value.suggested_replies.map(s=>s.trim()))];
  for(const option of ['Main agla pal dekhta hoon.','Main poochta hoon ki ab kya hoga.','Main thoda waqt leta hoon.'])if(suggestions.length<3&&!suggestions.includes(option))suggestions.push(option);
  const dialogue=value.dialogue.map(d=>({character:canonical(d.character),text:d.text,actions:d.actions||[]})).filter(d=>d.character);
@@ -140,8 +138,12 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  gate.busy=true;ownsRequest=true;
  const director=engine.buildDirector(messages);
  const started=Date.now();
+ const structured=settings.provider==='openrouter'?{
+  response_format:sceneResponseFormat([...(director.main_cast||['Arohi','Naina']),...director.world.allowed_roles]),
+  provider:{require_parameters:true}
+ }:{};
  const response=await fetcher(settings.endpoint,{method:'POST',headers:{Authorization:'Bearer '+settings.key,'Content-Type':'application/json'},
- body:JSON.stringify({model:settings.model,messages:[{role:'system',content:(storyPack?.prompt||prompt)+'\n\n'+engine.directorMessage(director).content},...messages],max_tokens:1100,temperature:0.65,
+ body:JSON.stringify({model:settings.model,...structured,messages:[{role:'system',content:(storyPack?.prompt||prompt)+'\n\n'+engine.directorMessage(director).content},...messages],max_tokens:1400,temperature:0.45,
  stream:true,stream_options:{include_usage:true}}),signal:AbortSignal.timeout(requestTimeoutMs),redirect:'error'});
  if(!response.ok){
  await response.body?.cancel();
@@ -157,14 +159,24 @@ export function createDemoServer({settings=config(),fetcher=fetch,port=8789,publ
  first_token_ms:result.firstToken,total_duration_ms:Date.now()-started};
  if(result.reportedModel&&result.reportedModel.toLowerCase()!==settings.model.toLowerCase())return respond(502,{error:'The provider reported a different model. Review the configuration before continuing.',telemetry});
  if(!result.done||result.finishReason!=='stop')return respond(502,{error:'The provider did not complete the scene normally. Usage may still have been charged.',telemetry});
- let content=result.text.trim();
- if(content.startsWith('```'))content=content.slice(3).replace(/^json\s*/i,'').replace(/```\s*$/,'').trim();
- let story;
- try{story=engine.placeCharacterActions(engine.enforceSpeakers(validateStory(JSON.parse(content),{canonical:storyPack?.canonical||canonicalCharacter}),director));}catch(error){return respond(502,{error:error instanceof SyntaxError?'The model returned invalid JSON. Your message is kept for retry.':error.message,telemetry});}
+ let story,recovery=null,immersionCorrected=false;
+ try{
+  const parsed=parseSceneJson(result.text);
+  story=validateStory(parsed.value,{canonical:storyPack?.canonical||canonicalCharacter});
+  if(parsed.repaired)recovery={kind:'local_format_repair',extra_model_calls:0};
+ }catch(error){
+  const grounded=storyPack?.recoverScene?.(director,messages);
+  if(!grounded)return respond(502,{code:'scene_format',error:'Is baar jawab theek se taiyaar nahi ho paaya. Tumhara message draft mein safe hai; dobara bhej sakte ho.',
+   diagnostic:error instanceof SyntaxError?'invalid_json':'invalid_scene_shape',telemetry});
+  story=validateStory(grounded,{canonical:storyPack.canonical});
+  recovery={kind:'grounded_inspection',extra_model_calls:0};
+ }
+ const protectedScene=protectImmersion(story);story=protectedScene.story;immersionCorrected=protectedScene.corrected;
+ story=engine.placeCharacterActions(engine.enforceSpeakers(story,director));
  if(director.episode_turn===18)story.episode_end={episode:director.episode,
   hook:story.episode_hook||'Yahin ek viraam. Agle episode mein isi kahani ko aage badha sakte ho.'};
  // Return public controls only; private director/backstory notes stay on the server.
- return respond(200,{story,story_id:storyPack?.id||'cafe',director:{revision,turn:director.turn,episode:director.episode,episode_turn:director.episode_turn,speaking:director.speaking,phase:director.world.phase,
+ return respond(200,{story,recovery,quality:{immersion_corrected:immersionCorrected},story_id:storyPack?.id||'cafe',director:{revision,turn:director.turn,episode:director.episode,episode_turn:director.episode_turn,speaking:director.speaking,phase:director.world.phase,
   ...(storyPack?.publicDirector?.(director)||{})},configured_model:settings.model,model:result.reportedModel,telemetry});
  }catch(error){
  respond(502,{error:error.name==='TimeoutError'?'The model timed out. Your message is kept; usage may still have been charged.':'Could not complete the model request. Your message is kept for retry.',telemetry});

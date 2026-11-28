@@ -122,6 +122,18 @@ export const trainPack={
  id:'last-train',prompt:await readFile(new URL('./train-prompt.txt',import.meta.url),'utf8'),canonical:trainCanonical,
  buildDirector:trainDirector,directorMessage:d=>({role:'system',content:directorMessage(d).content+'\n\n'+trainNotes(d)}),
  enforceSpeakers,placeCharacterActions:s=>placeCharacterActions(s,{activeCast:cast,canonical:trainCanonical}),
+ recoverScene:d=>{
+  const earned=d.world.mystery.clues.filter(clue=>clue.turn===d.turn);
+  if(!earned.length)return null;
+  // This authored recovery answers only an inspection with a known canonical fact.
+  // It does not pretend an unreadable model reply contained a new conversation.
+  const phase=d.world.mystery.phase;
+  const next=phase==='investigation'?['Main seat 16 ke neeche neele bag ka bahari seal inspect karta hoon.','Kabir, kya guard se baat ho sakti hai?','Main pehle is photo ko dhyan se dekhta hoon.']:
+   phase==='connection'?['Kabir, paper pickup sheet dikhao.','Main apna agla sawaal sochta hoon.','Main guard se baat karna chahta hoon.']:
+   phase==='contradiction'?['Meera, original recording play karo.','Main pickup entry ki photo leta hoon.','Main guard ko yeh entry dikhata hoon.']:
+   ['Main evidence ke baare mein guard se baat karta hoon.','Main apna agla kadam sochta hoon.','Main dono ki baat alag-alag sunna chahta hoon.'];
+  return {narration:earned.map(c=>c.fact),character_actions:[],dialogue:[],suggested_replies:next};
+ },
  publicDirector:d=>({casebook:d.world.mystery.clues,mystery_phase:d.world.mystery.phase,
   at_station:d.world.mystery.at_station,next_stop:d.world.mystery.next_stop}),
  publicProfile:{id:'last-train',title:'The Last Train',storage_key:'convico-last-train-review-v1',api_base:'/last-train',cast,

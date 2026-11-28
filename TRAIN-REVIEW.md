@@ -59,6 +59,22 @@ The train, route, Devgarh Junction and railway logistics are fictional.
     mix-ups, premature spoilers, clue consistency, user freedom, latency and
     actual provider cost before calling this live-tested.
 
+## Revision 8 screenshot regressions
+
+- Send `jsvbchjscskjcbaks`. Expect an in-world clarification, without keyboard,
+  typing, text-box or JSON remarks. Check all visible fields, not only dialogue.
+- Complete the phone inspection, quiet Meera, then send:
+  `Main seat 16 ke neeche wale neele bag ka bahari seal inspect karta hoon.
+  Bag nahi kholta.` The message should complete normally. If a completed model
+  reply cannot be read, a labelled recovery may show the authored seal fact;
+  it must not open the bag, reveal later clues or unmute Meera.
+- Confirm normal phone-screen and received-message descriptions still work:
+  these are story props, unlike chat-interface references.
+- Inspect an exported attempt after a repaired/recovered scene. There should
+  be one provider request, actual reported usage, and recovery metadata. A
+  cutoff, credit failure or network outage still needs a preserved draft and
+  honest recovery handling; no claim of an error-free hosted service is made.
+
 ## Honest limits
 
 The casebook and canon are authored; natural-language action detection is

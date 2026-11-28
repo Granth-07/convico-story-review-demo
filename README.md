@@ -16,7 +16,36 @@ See `TRAIN-REVIEW.md` for setup, feature coverage and live acceptance.
 For local play, set the funded provider key privately and run `npm run dev`.
 Open `http://127.0.0.1:8789/last-train/` for the thriller or `/` for the cafe.
 
-## Updated story (revision 7)
+## Reply quality update (revision 8)
+
+- OpenRouter requests now use strict `json_schema` response format and
+  `provider.require_parameters=true`, keeping Gemma 26B and one provider call.
+  The generation temperature is 0.45 and the output cap is 1400 tokens.
+  The current model endpoint metadata advertises structured-output support on
+  multiple providers. Support/enforcement still varies by endpoint; it is not
+  a guarantee against every malformed reply or provider outage.
+- Bounded local parsing accepts a complete object with a fence/prose wrapper,
+  trailing commas, smart quote delimiters or raw newline/tab characters inside
+  strings. It does not execute code, guess missing facts, close truncated output,
+  or make another paid request.
+- During an explicitly earned train inspection, a completed but unreadable
+  reply can be replaced with the authored casebook fact for that action. Its
+  `recovery.kind=grounded_inspection` and visible attribution identify it as a
+  story-engine recovery, not a successful model-generated conversation.
+- A final immersion filter removes interface references from narration,
+  actions, dialogue, suggestions and episode hooks. Unclear user speech gets a
+  natural clarification; in-world phones, screens and plot messages remain.
+  This phrase filter is a defence against known leaks, not full semantic proof.
+- Irrecoverable output without an earned inspection stays uncommitted. The UI
+  shows a friendly draft-preserved message rather than a raw JSON exception;
+  diagnostics stay in exports. Cutoff responses and real provider errors do not
+  manufacture a scene. Existing silence, evidence and request-replay rules apply.
+
+Provider references checked 28 November 2026:
+[OpenRouter structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
+and [Gemma 26B endpoint metadata](https://openrouter.ai/api/v1/models/google/gemma-4-26b-a4b-it/endpoints).
+
+## Story and consequence updates (revision 7)
 
 - The cast validator now accepts relevant supporting roles, rather than failing
   generation whenever a police officer or medic speaks. Police Officer,
@@ -115,7 +144,7 @@ Keep the provider key separate from the reviewer password.
   not consume another slot). The counter resets when Render
   restarts/redeploys the process. It is not a permanent dollar spending limit.
 - One model call runs at a time. There is no automatic retry or different-model fallback.
-- Each session is capped at 60 turns / 60000 history characters, with 1100 output tokens
+- Each session is capped at 60 turns / 60000 history characters, with 1400 output tokens
   per call. Full completed history is supplied each turn; input cost grows over time.
 - Actual token usage and provider cost appear only when the provider returns them.
   Missing cost is labelled unavailable. Rejected/failed requests can still incur charges.

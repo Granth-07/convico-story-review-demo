@@ -199,7 +199,7 @@ test('police generation is accepted end to end instead of failing the two-charac
  await withCore(async()=>providerScene({...scene,dialogue:[{character:'Police Officer',actions:['Officer paas aata hai.'],text:'Kya hua tha?'}]}),async send=>{
   const response=await send(history('Police ko call kiya.','Main rukta hoon.','Police kuch bolega.'),randomUUID());
   assert.equal(response.status,200);const data=await response.json();
-  assert.equal(data.story.dialogue[0].character,'Police Officer');assert.equal(data.director.revision,7);
+  assert.equal(data.story.dialogue[0].character,'Police Officer');assert.equal(data.director.revision,8);
  });
 });
 test('duplicate in-flight and completed requests reuse one provider call and one quota reservation',async()=>{
@@ -273,7 +273,7 @@ test('review HTTP flow: auth, state reconstruction, provider SSE, cost, failures
   assert.equal(unauthorized.status,401);
   assert.equal((await localFetch(url+'/healthz',{headers:{host:headers.host}})).status,200);
   const status=await (await localFetch(url+'/api/status',{headers})).json();
-  assert.equal(status.revision,7);assert.equal(status.key,undefined);
+  assert.equal(status.revision,8);assert.equal(status.key,undefined);
   const first=await (await send(history('Arohi, chup raho.'))).json();
   assert.deepEqual(first.story.dialogue,[]); // No forced reply from Naina to Arohi's silence request.
   assert.equal(first.director.speaking.Arohi,false);assert.equal(first.telemetry.cost_usd,0.0001);
@@ -405,4 +405,21 @@ test('browser renders shared scene first and an NPC action immediately before th
  assert.equal(article.children[1].children[0].textContent,'Naina pen rakh deti hai.');
  assert.equal(article.children[2].className,'dialogue');
  assert.equal(article.children[2].children[0].textContent,'Naina');
+});
+test('browser shows an honest recovery label and saves its source metadata',async()=>{
+ const browser=await browserHarness(async()=>new Response(JSON.stringify({story:scene,recovery:{kind:'grounded_inspection',extra_model_calls:0},
+  quality:{immersion_corrected:false},configured_model:'google/gemma-4-26b-a4b-it',model:'google/gemma-4-26b-a4b-it'})));
+ await browser.context.send('Main seal inspect karta hoon.');
+ assert.equal(browser.saved().pending,null);
+ assert.equal(browser.saved().messages.at(-1).recovery.kind,'grounded_inspection');
+ assert.match(browser.elements.get('log').children.at(-1).children.at(-1).textContent,/restored from the clue record/);
+ assert.equal(browser.elements.get('send-feedback').hidden,true);
+});
+test('an unreadable HTTP response keeps the draft without displaying a JSON parsing exception',async()=>{
+ const browser=await browserHarness(async()=>new Response('<html>Temporary gateway error</html>',{status:502}));
+ await browser.context.send('Main seal inspect karta hoon.');
+ assert.equal(browser.saved().pending.text,'Main seal inspect karta hoon.');
+ assert.doesNotMatch(browser.elements.get('send-feedback').textContent,/JSON|SyntaxError|Unexpected token/);
+ assert.match(browser.elements.get('send-feedback').textContent,/safe/);
+ assert.equal(browser.elements.get('send-button').disabled,false);
 });

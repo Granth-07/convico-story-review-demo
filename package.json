@@ -1,8 +1,8 @@
 {
   "name": "convico-story-review-demo",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "engines": {"node": ">=22 <25"},
-  "scripts": {"start": "node review-server.mjs", "dev": "node story-server.mjs", "test": "node --test story.test.mjs train.test.mjs"}
+  "scripts": {"start": "node review-server.mjs", "dev": "node story-server.mjs", "test": "node --test story.test.mjs train.test.mjs scene-quality.test.mjs"}
 }
