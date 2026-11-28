@@ -61,6 +61,10 @@ The train, route, Devgarh Junction and railway logistics are fictional.
 
 ## Revision 8 screenshot regressions
 
+These fixes are scoped to `/last-train/`. `/api/status` for the cafe remains at
+revision 7; `/last-train/api/status` reports revision 8. Cafe prompt, settings,
+parsing and UI error handling retain their previous behaviour.
+
 - Send `jsvbchjscskjcbaks`. Expect an in-world clarification, without keyboard,
   typing, text-box or JSON remarks. Check all visible fields, not only dialogue.
 - Complete the phone inspection, quiet Meera, then send:

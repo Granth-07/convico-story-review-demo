@@ -16,9 +16,15 @@ See `TRAIN-REVIEW.md` for setup, feature coverage and live acceptance.
 For local play, set the funded provider key privately and run `npm run dev`.
 Open `http://127.0.0.1:8789/last-train/` for the thriller or `/` for the cafe.
 
-## Reply quality update (revision 8)
+## The Last Train only: reply quality update (revision 8)
 
-- OpenRouter requests now use strict `json_schema` response format and
+The new JSON/immersion/recovery behaviour is enabled by the train story pack
+only. The cafe retains its prior revision-7 prompt, parsing behaviour, generation
+settings (1100-token cap, temperature 0.65), and UI error behaviour. Route-level
+tests verify the two policies independently; shared infrastructure does not
+enable train-only options for the cafe.
+
+- The Last Train's OpenRouter requests now use strict `json_schema` response format and
   `provider.require_parameters=true`, keeping Gemma 26B and one provider call.
   The generation temperature is 0.45 and the output cap is 1400 tokens.
   The current model endpoint metadata advertises structured-output support on
@@ -144,8 +150,9 @@ Keep the provider key separate from the reviewer password.
   not consume another slot). The counter resets when Render
   restarts/redeploys the process. It is not a permanent dollar spending limit.
 - One model call runs at a time. There is no automatic retry or different-model fallback.
-- Each session is capped at 60 turns / 60000 history characters, with 1400 output tokens
-  per call. Full completed history is supplied each turn; input cost grows over time.
+- Each session is capped at 60 turns / 60000 history characters. The cafe uses
+  a 1100-token output cap and The Last Train uses 1400 tokens per call. Full
+  completed history is supplied each turn; input cost grows over time.
 - Actual token usage and provider cost appear only when the provider returns them.
   Missing cost is labelled unavailable. Rejected/failed requests can still incur charges.
 - History is local to each reviewer's browser, not durable server-side memory.

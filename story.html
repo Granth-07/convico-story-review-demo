@@ -80,6 +80,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid #ffe5c6;outline-of
 <script>
 'use strict';
 const profile=/*__STORY_PROFILE__*/ null;
+const trainQuality=profile?.id==='last-train';
 const apiBase=profile?.api_base||'';
 const mainCast=profile?.cast||['Arohi','Naina'];
 const storageKey=profile?.storage_key||'convico-kal-hosted-review-v1';
@@ -191,7 +192,7 @@ function render(){
  if(message.episode_end){const ending=document.createElement('div');ending.className='episode-ending';
  line(ending,'strong','','Episode '+message.episode_end.episode+' · Reading pause');
  line(ending,'p','',message.episode_end.hook);article.append(ending);}
- if(message.recovery?.kind==='grounded_inspection')line(article,'small','response-source','Recovery scene · restored from the clue record; no extra model request');
+ if(trainQuality&&message.recovery?.kind==='grounded_inspection')line(article,'small','response-source','Recovery scene · restored from the clue record; no extra model request');
  else if(message.source==='gemma')line(article,'small','response-source',message.model?'Reported model: '+message.model:'Gemma 26B configured · provider model unreported');
  }
  log.append(article);
@@ -291,19 +292,19 @@ async function send(text){
  const data=await result.json();
  receivedResponse=true;
  state.attempts.push({at:new Date().toISOString(),http_ok:result.ok,accepted:false,telemetry:data.telemetry??null,error:data.error??null,
- diagnostic:data.diagnostic??null,recovery:data.recovery??null});recordedAttempt=true;save();
+ ...(trainQuality?{diagnostic:data.diagnostic??null,recovery:data.recovery??null}:{})});recordedAttempt=true;save();
  if(!result.ok)throw Error(data.error||'Gemma request failed. Your message is kept for retry.');
  if(!validStory(data.story))throw Error('Gemma returned an incomplete scene. Your message is kept for retry.');
  if(data.configured_model?.toLowerCase()!=='google/gemma-4-26b-a4b-it')throw Error('Unexpected configured model. Review the server configuration.');
  if(data.model&&data.model.toLowerCase()!=='google/gemma-4-26b-a4b-it')throw Error('Provider reported an unexpected model. Review before continuing.');
  state.messages.push({role:'user',text},{role:'story',...data.story,source:'gemma',director:data.director,
- model:data.model,telemetry:data.telemetry??null,recovery:data.recovery??null,quality:data.quality??null});
+ model:data.model,telemetry:data.telemetry??null,...(trainQuality?{recovery:data.recovery??null,quality:data.quality??null}:{})});
  state.attempts.at(-1).accepted=true;state.pending=null;save();input.value='';
  }catch(failure){
  if(!recordedAttempt)state.attempts.push({at:new Date().toISOString(),http_ok:false,accepted:false,telemetry:null,error:failure.message});
  else state.attempts.at(-1).error=failure.message;
  error=['TimeoutError','AbortError'].includes(failure.name)?'Waiting stopped. Your draft is saved. Retry checks the same request while this server still retains it.':failure.message;
- if(failure.name==='SyntaxError'||/invalid JSON|incomplete scene|Unexpected token/i.test(error))error='Is baar jawab theek se taiyaar nahi ho paaya. Tumhara message safe hai; dobara bhej sakte ho.';
+ if(trainQuality&&(failure.name==='SyntaxError'||/invalid JSON|incomplete scene|Unexpected token/i.test(error)))error='Is baar jawab theek se taiyaar nahi ho paaya. Tumhara message safe hai; dobara bhej sakte ho.';
  if(!receivedResponse)error+=' The result is unconfirmed; keep the same message to check the same request.';
  state.pending={text,request_id:receivedResponse?null:requestId,error};save();
  }finally{clearTimeout(timeout);activeController=null;busy=false;pendingText='';render();input.focus();}

@@ -8,6 +8,7 @@ import {speakerCommand,buildDirector,directorMessage,enforceSpeakers,placeCharac
 import {validateStory,createDemoServer} from './story-server.mjs';
 import {buildWorld,worldPolicy,ensureWorldBeats} from './story-world.mjs';
 import {createReviewServer} from './review-server.mjs';
+import {trainPack} from './train-engine.mjs';
 
 const scene={narration:['Baarish ki awaaz sunai deti hai.','Counter ke paas ek kursi khaali hai.'],
  dialogue:[{character:'Arohi',text:'Theek hai.',actions:[]},{character:'Naina',text:'Chai taiyaar hai.',actions:[]}],
@@ -199,7 +200,7 @@ test('police generation is accepted end to end instead of failing the two-charac
  await withCore(async()=>providerScene({...scene,dialogue:[{character:'Police Officer',actions:['Officer paas aata hai.'],text:'Kya hua tha?'}]}),async send=>{
   const response=await send(history('Police ko call kiya.','Main rukta hoon.','Police kuch bolega.'),randomUUID());
   assert.equal(response.status,200);const data=await response.json();
-  assert.equal(data.story.dialogue[0].character,'Police Officer');assert.equal(data.director.revision,8);
+  assert.equal(data.story.dialogue[0].character,'Police Officer');assert.equal(data.director.revision,7);
  });
 });
 test('duplicate in-flight and completed requests reuse one provider call and one quota reservation',async()=>{
@@ -273,7 +274,7 @@ test('review HTTP flow: auth, state reconstruction, provider SSE, cost, failures
   assert.equal(unauthorized.status,401);
   assert.equal((await localFetch(url+'/healthz',{headers:{host:headers.host}})).status,200);
   const status=await (await localFetch(url+'/api/status',{headers})).json();
-  assert.equal(status.revision,8);assert.equal(status.key,undefined);
+  assert.equal(status.revision,7);assert.equal(status.key,undefined);
   const first=await (await send(history('Arohi, chup raho.'))).json();
   assert.deepEqual(first.story.dialogue,[]); // No forced reply from Naina to Arohi's silence request.
   assert.equal(first.director.speaking.Arohi,false);assert.equal(first.telemetry.cost_usd,0.0001);
@@ -339,17 +340,17 @@ test('browser: legacy history preserved, controls render, reset confirms and sav
  assert.deepEqual(JSON.parse(saved).messages.at(-1).dialogue,[scene.dialogue[0]]);
 });
 
-async function browserHarness(fetcher,stored=null){
- const html=await readFile(new URL('./story.html',import.meta.url),'utf8');
+async function browserHarness(fetcher,stored=null,profile=null){
+ const html=(await readFile(new URL('./story.html',import.meta.url),'utf8')).replace('/*__STORY_PROFILE__*/ null',JSON.stringify(profile));
  const script=html.match(/<script>([\s\S]*?)<\/script>/)[1],elements=new Map();
  const element=()=>({children:[],listeners:{},value:'',hidden:false,
   append(child){this.children.push(child);},replaceChildren(){this.children=[];},setAttribute(){},
   addEventListener(name,fn){this.listeners[name]=fn;},focus(){}});
  let saved=stored;
- const context={document:{getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},
+ const context={document:{body:element(),getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element},
   structuredClone,console,location:{protocol:'http:'},crypto:{randomUUID},AbortController,AbortSignal,setTimeout,clearTimeout,
   localStorage:{getItem:()=>saved,setItem:(_key,value)=>{saved=value;}},confirm:()=>false,
-  fetch:async(url,options)=>url==='/api/status'?new Response(JSON.stringify({configured:true,revision:7,model:'google/gemma-4-26b-a4b-it'})):fetcher(url,options)};
+  fetch:async(url,options)=>url.endsWith('/api/status')?new Response(JSON.stringify({configured:true,revision:profile?8:7,model:'google/gemma-4-26b-a4b-it'})):fetcher(url,options)};
  vm.runInNewContext(script,context);await new Promise(resolve=>setImmediate(resolve));
  return {context,elements,saved:()=>JSON.parse(saved)};
 }
@@ -407,8 +408,8 @@ test('browser renders shared scene first and an NPC action immediately before th
  assert.equal(article.children[2].children[0].textContent,'Naina');
 });
 test('browser shows an honest recovery label and saves its source metadata',async()=>{
- const browser=await browserHarness(async()=>new Response(JSON.stringify({story:scene,recovery:{kind:'grounded_inspection',extra_model_calls:0},
-  quality:{immersion_corrected:false},configured_model:'google/gemma-4-26b-a4b-it',model:'google/gemma-4-26b-a4b-it'})));
+ const browser=await browserHarness(async()=>new Response(JSON.stringify({story:{...scene,dialogue:[{character:'Meera',text:'Dekhte hain.'}]},recovery:{kind:'grounded_inspection',extra_model_calls:0},
+  quality:{immersion_corrected:false},configured_model:'google/gemma-4-26b-a4b-it',model:'google/gemma-4-26b-a4b-it'})),null,trainPack.publicProfile);
  await browser.context.send('Main seal inspect karta hoon.');
  assert.equal(browser.saved().pending,null);
  assert.equal(browser.saved().messages.at(-1).recovery.kind,'grounded_inspection');
@@ -416,7 +417,7 @@ test('browser shows an honest recovery label and saves its source metadata',asyn
  assert.equal(browser.elements.get('send-feedback').hidden,true);
 });
 test('an unreadable HTTP response keeps the draft without displaying a JSON parsing exception',async()=>{
- const browser=await browserHarness(async()=>new Response('<html>Temporary gateway error</html>',{status:502}));
+ const browser=await browserHarness(async()=>new Response('<html>Temporary gateway error</html>',{status:502}),null,trainPack.publicProfile);
  await browser.context.send('Main seal inspect karta hoon.');
  assert.equal(browser.saved().pending.text,'Main seal inspect karta hoon.');
  assert.doesNotMatch(browser.elements.get('send-feedback').textContent,/JSON|SyntaxError|Unexpected token/);

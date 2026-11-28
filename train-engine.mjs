@@ -1,6 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {buildDirector,directorMessage,enforceSpeakers,placeCharacterActions} from './story-director.mjs';
 import {buildWorld,canonicalCharacter} from './story-world.mjs';
+import {sceneResponseFormat,parseSceneJson,protectImmersion} from './scene-quality.mjs';
 
 const cast=['Meera','Kabir'];
 const clues={
@@ -87,6 +88,7 @@ export function buildTrainWorld(messages){
 
 export function trainDirector(messages){
  const d=buildDirector(messages,{activeCast:cast,kind:'train',worldBuilder:buildTrainWorld});
+ d.revision=8;
  d.secrets_stage=d.world.mystery.phase==='decision'?'Explain the earned evidence, without choosing the player\'s response.':
   'Disclose only what the current casebook and conditional private notes permit. Turn count alone does not unlock a secret.';
  return d;
@@ -119,7 +121,11 @@ export const trainOpening={
  character_actions:[],suggested_replies:['Meera, phone ki photo zoom karke dikhao.','Kabir, is coach mein guard se baat ho sakti hai?','Main pehle aisle mein baithe passenger ko dekhta hoon.']
 };
 export const trainPack={
- id:'last-train',prompt:await readFile(new URL('./train-prompt.txt',import.meta.url),'utf8'),canonical:trainCanonical,
+ id:'last-train',revision:8,prompt:await readFile(new URL('./train-prompt.txt',import.meta.url),'utf8'),canonical:trainCanonical,
+ parseScene:parseSceneJson,protectScene:protectImmersion,
+ requestOptions:(d,settings)=>({max_tokens:1400,temperature:0.45,...(settings.provider==='openrouter'?{
+  response_format:sceneResponseFormat([...d.main_cast,...d.world.allowed_roles]),provider:{require_parameters:true}
+ }:{})}),
  buildDirector:trainDirector,directorMessage:d=>({role:'system',content:directorMessage(d).content+'\n\n'+trainNotes(d)}),
  enforceSpeakers,placeCharacterActions:s=>placeCharacterActions(s,{activeCast:cast,canonical:trainCanonical}),
  recoverScene:d=>{

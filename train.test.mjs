@@ -107,12 +107,13 @@ function wire(url,options={}){
 function providerReply(scene){return new Response('data: '+JSON.stringify({model:'google/gemma-4-26b-a4b-it',choices:[{delta:{content:JSON.stringify(scene)},finish_reason:'stop'}],
  usage:{prompt_tokens:100,completion_tokens:50,cost:0.0001}})+'\n\ndata: [DONE]\n\n');}
 test('authenticated collection serves both stories, isolates prompts and shares model quota',async()=>{
- let calls=0,trainPrompt='';
+ let calls=0,trainPrompt='',cafePayload,trainPayload;
  const server=createReviewServer({password:'train-review-password-123',publicOrigin:'http://127.0.0.1:8789',maxRequests:2,
   settings:{key:'test',provider:'openrouter',model:'google/gemma-4-26b-a4b-it',endpoint:'https://example.invalid'},
   fetcher:async(_url,options)=>{
    calls++;const payload=JSON.parse(options.body);
-   if(payload.messages[0].content.startsWith('THE LAST TRAIN')){trainPrompt=payload.messages[0].content;return providerReply(example);}
+   if(payload.messages[0].content.startsWith('THE LAST TRAIN')){trainPayload=payload;trainPrompt=payload.messages[0].content;return providerReply(example);}
+   cafePayload=payload;
    return providerReply({...example,dialogue:[{character:'Arohi',text:'Chai taiyaar hai.'}]});
   }});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -124,7 +125,8 @@ test('authenticated collection serves both stories, isolates prompts and shares 
   const page=await (await wire(url+'/last-train/',{headers})).text();
   assert.match(page,/convico-last-train-review-v1/);assert.doesNotMatch(page,/Sethi sent the cropped photograph/);
   assert.equal((await wire(url+'/last-train',{headers})).status,302);
-  const status=await (await wire(url+'/last-train/api/status',{headers})).json();assert.equal(status.story,'last-train');
+  const status=await (await wire(url+'/last-train/api/status',{headers})).json();assert.equal(status.story,'last-train');assert.equal(status.revision,8);
+  const cafeStatus=await (await wire(url+'/api/status',{headers})).json();assert.equal(cafeStatus.revision,7);
   const id=randomUUID(),messages=history(investigation[0]);
   const train=await (await send('/last-train/api/story',messages,id)).json();
   assert.equal(train.story_id,'last-train');assert.equal(train.story.dialogue[0].character,'Meera');
@@ -133,6 +135,12 @@ test('authenticated collection serves both stories, isolates prompts and shares 
   const cafe=await (await send('/api/story',history('Chai?'),randomUUID())).json();
   assert.equal(cafe.story_id,'cafe');assert.equal(cafe.story.dialogue[0].character,'Arohi');
   assert.equal(cafe.director.casebook,undefined);
+  assert.equal(cafePayload.response_format,undefined);assert.equal(cafePayload.provider,undefined);
+  assert.equal(cafePayload.max_tokens,1100);assert.equal(cafePayload.temperature,0.65);
+  assert.equal(cafe.recovery,undefined);assert.equal(cafe.quality,undefined);
+  assert.equal(trainPayload.response_format.type,'json_schema');assert.equal(trainPayload.provider.require_parameters,true);
+  assert.equal(trainPayload.max_tokens,1400);assert.equal(trainPayload.temperature,0.45);
+  assert.equal(cafePayload.messages[0].content.includes('Never diagnose a keyboard'),false);
   assert.equal((await send('/last-train/api/story',history('Kabir, hello.'),randomUUID())).status,429);
   assert.equal((await (await send('/last-train/api/story',messages,id)).json()).replayed,true);assert.equal(calls,2);
  }finally{await new Promise(resolve=>server.close(resolve));}
